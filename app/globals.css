@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui;
+  --font-display: var(--font-display), "Space Grotesk", sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular;
+}
+
+@layer components {
+  .label {
+    @apply block text-xs font-bold uppercase tracking-widest text-gray-400 mb-2 ml-1;
+  }
+  
+  .input {
+    @apply w-full px-5 py-3.5 bg-gray-50 border border-gray-100 rounded-[20px] outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all text-sm font-medium;
+  }
+
+  .input-small {
+    @apply w-full px-3 py-2 bg-white border border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-600 transition-all text-xs font-medium;
+  }
+  
+  .button-primary {
+    @apply bg-indigo-600 text-white rounded-full font-bold hover:bg-indigo-700 transition-all active:scale-[0.98] shadow-lg shadow-indigo-100;
+  }
+}
+
+/* Custom UI adjustments */
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #d1d5db;
+}

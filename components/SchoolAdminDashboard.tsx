@@ -1,0 +1,915 @@
+'use client';
+
+import { useState, useEffect, useRef, forwardRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  Users, 
+  UserSquare2, 
+  Library, 
+  FileText, 
+  Sparkles, 
+  BarChart3, 
+  LogOut,
+  Plus,
+  Search,
+  Upload,
+  BookOpen,
+  CheckCircle2,
+  AlertCircle,
+  FileDown,
+  Printer,
+  ChevronRight,
+  School as SchoolIcon,
+  X,
+  Loader2
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useReactToPrint } from 'react-to-print';
+import { supabase } from '@/src/supabaseClient';
+
+interface Section {
+  id: string;
+  title: string;
+  count: number;
+  marks: number;
+}
+
+export default function SchoolAdminDashboard({ schoolId }: { schoolId: string }) {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [syllabusList, setSyllabusList] = useState<any[]>([]);
+  const [papers, setPapers] = useState<any[]>([]);
+  const [results, setResults] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+
+  const fetchData = async () => {
+    const urls = [
+      '/api/school/teachers',
+      '/api/school/students',
+      '/api/school/syllabus',
+    ];
+    const [t, s, syl] = await Promise.all(urls.map(url => fetch(url).then(r => r.json())));
+    setTeachers(Array.isArray(t) ? t : []);
+    setStudents(Array.isArray(s) ? s : []);
+    setSyllabusList(Array.isArray(syl) ? syl : []);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [schoolId]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.reload();
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col fixed h-full z-10">
+        <div className="p-6 border-b border-gray-100">
+          <div className="flex items-center gap-2 text-indigo-600 font-bold text-xl">
+            <SchoolIcon className="w-8 h-8" />
+            <span className="font-display">EduPrep AI</span>
+          </div>
+          <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest font-semibold text-ellipsis overflow-hidden whitespace-nowrap">Dashboard</p>
+        </div>
+        
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          <NavItem icon={BookOpen} label="Overview" active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} />
+          <NavItem icon={Users} label="Teachers" active={activeTab === 'teachers'} onClick={() => setActiveTab('teachers')} />
+          <NavItem icon={UserSquare2} label="Students" active={activeTab === 'students'} onClick={() => setActiveTab('students')} />
+          <NavItem icon={Library} label="Syllabus Library" active={activeTab === 'library'} onClick={() => setActiveTab('library')} />
+          <NavItem icon={Sparkles} label="AI Paper Generator" active={activeTab === 'generator'} onClick={() => setActiveTab('generator')} />
+          <NavItem icon={FileText} label="Assessments" active={activeTab === 'assessments'} onClick={() => setActiveTab('assessments')} />
+          <NavItem icon={BarChart3} label="Performance" active={activeTab === 'performance'} onClick={() => setActiveTab('performance')} />
+        </nav>
+
+        <div className="p-4 border-t border-gray-100">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-2 text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+            <LogOut className="w-4 h-4" />
+            Sign Out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 ml-64 p-8">
+        <AnimatePresence mode="wait">
+          {activeTab === 'overview' && <OverviewView teachers={teachers} students={students} syllabus={syllabusList} />}
+          {activeTab === 'teachers' && <TeachersView teachers={teachers} onUpdate={fetchData} />}
+          {activeTab === 'students' && <StudentsView students={students} onUpdate={fetchData} />}
+          {activeTab === 'library' && <LibraryView syllabus={syllabusList} onUpdate={fetchData} />}
+          {activeTab === 'generator' && <GeneratorView syllabus={syllabusList} />}
+          {activeTab === 'assessments' && <AssessmentsView />}
+          {activeTab === 'performance' && <PerformanceView students={students} />}
+        </AnimatePresence>
+      </main>
+    </div>
+  );
+}
+
+function NavItem({ icon: Icon, label, active, onClick }: any) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-xl transition-all ${
+        active 
+          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' 
+          : 'text-gray-600 hover:bg-gray-50'
+      }`}
+    >
+      <Icon className="w-4 h-4" />
+      {label}
+    </button>
+  );
+}
+
+// --- Sub-Views ---
+
+function OverviewView({ teachers, students, syllabus }: any) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+      <h1 className="text-3xl font-display font-bold mb-8">Dashboard Overview</h1>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <StatCard icon={Users} label="Total Teachers" value={teachers.length} color="bg-blue-500" />
+        <StatCard icon={UserSquare2} label="Registered Students" value={students.length} color="bg-indigo-500" />
+        <StatCard icon={Library} label="Syllabus Resources" value={syllabus.length} color="bg-purple-500" />
+      </div>
+      
+      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm">
+          <h2 className="text-xl font-bold mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <button className="p-4 bg-gray-50 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all text-left">
+              <Plus className="w-6 h-6 mb-2" />
+              <div className="font-bold">Add Teacher</div>
+              <div className="text-xs text-gray-400">New staff credentials</div>
+            </button>
+            <button className="p-4 bg-gray-50 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all text-left">
+              <Sparkles className="w-6 h-6 mb-2" />
+              <div className="font-bold">Generate Paper</div>
+              <div className="text-xs text-gray-400">AI paper designer</div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, color }: any) {
+  return (
+    <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm flex items-center gap-6">
+      <div className={`p-4 rounded-2xl ${color} text-white`}>
+        <Icon className="w-8 h-8" />
+      </div>
+      <div>
+        <p className="text-gray-400 text-sm font-medium uppercase tracking-wider">{label}</p>
+        <p className="text-4xl font-display font-bold text-gray-900">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function TeachersView({ teachers, onUpdate }: any) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [formData, setFormData] = useState({ name: '', classes: [] as string[], subjects: [] as string[] });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setIsSubmitting(true);
+    const res = await fetch('/api/school/teachers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData)
+    });
+    setIsSubmitting(false);
+    if (res.ok) {
+      setIsAdding(false);
+      setFormData({ name: '', classes: [], subjects: [] });
+      onUpdate();
+    } else {
+      const data = await res.json();
+      setErrorMsg(data.error || 'Failed to add teacher');
+    }
+  };
+
+  const CLASSES = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'];
+  const SUBJECTS = ['Telugu', 'Hindi', 'English', 'Maths', 'Science', 'Physics', 'Biology', 'Social'];
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-display font-bold">Faculty Management</h1>
+        <button onClick={() => setIsAdding(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-medium flex items-center gap-2">
+          <Plus className="w-5 h-5" /> Add Teacher
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {teachers.map((t: any) => (
+          <div key={t.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+            <h3 className="text-xl font-bold mb-2">{t.name}</h3>
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1">
+                {t.classes.map((c: string) => <span key={c} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md font-bold">{c}</span>)}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {t.subjects.map((s: string) => <span key={s} className="text-[10px] px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md font-bold uppercase">{s}</span>)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isAdding && (
+        <Modal title="Add New Teacher" onClose={() => setIsAdding(false)}>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="label">Full Name</label>
+              <input required className="input" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+            </div>
+            <div>
+              <label className="label">Assigned Classes</label>
+              <div className="grid grid-cols-5 gap-2">
+                {CLASSES.map(c => (
+                  <button 
+                    key={c} type="button"
+                    onClick={() => {
+                      const newClasses = formData.classes.includes(c) ? formData.classes.filter(i => i !== c) : [...formData.classes, c];
+                      setFormData({...formData, classes: newClasses});
+                    }}
+                    className={`text-xs p-1 rounded border ${formData.classes.includes(c) ? 'bg-indigo-600 text-white' : 'bg-gray-50'}`}
+                  >{c}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="label">Subjects Expertise</label>
+              <div className="grid grid-cols-3 gap-2">
+                {SUBJECTS.map(s => (
+                  <button 
+                    key={s} type="button"
+                    onClick={() => {
+                      const newSubjects = formData.subjects.includes(s) ? formData.subjects.filter(i => i !== s) : [...formData.subjects, s];
+                      setFormData({...formData, subjects: newSubjects});
+                    }}
+                    className={`text-xs p-1 rounded border ${formData.subjects.includes(s) ? 'bg-indigo-600 text-white' : 'bg-gray-50'}`}
+                  >{s}</button>
+                ))}
+              </div>
+            </div>
+            {errorMsg && <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg leading-tight">{errorMsg}</p>}
+            <button disabled={isSubmitting} className="button-primary w-full py-3 mt-4 disabled:opacity-50 text-white">
+              {isSubmitting ? 'Saving...' : 'Save Teacher'}
+            </button>
+          </form>
+        </Modal>
+      )}
+    </motion.div>
+  );
+}
+
+function StudentsView({ students, onUpdate }: any) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [formData, setFormData] = useState({ name: '', class: '1st' });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await fetch('/api/school/students', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData) 
+    });
+    setIsAdding(false);
+    onUpdate();
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-display font-bold">Student Database</h1>
+        <button onClick={() => setIsAdding(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-medium flex items-center gap-2">
+          <Plus className="w-5 h-5" /> Add Student
+        </button>
+      </div>
+
+      <div className="bg-white rounded-[32px] border border-gray-100 overflow-hidden shadow-sm">
+        <table className="w-full text-left">
+          <thead className="bg-gray-50 text-gray-400 text-xs uppercase tracking-widest font-bold">
+            <tr>
+              <th className="px-8 py-4">Name</th>
+              <th className="px-8 py-4">Class</th>
+              <th className="px-8 py-4">ID</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {students.map((s: any) => (
+              <tr key={s.id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-8 py-5 font-bold text-gray-900">{s.name}</td>
+                <td className="px-8 py-5 text-gray-600">{s.class}</td>
+                <td className="px-8 py-5 text-xs font-mono text-gray-400">{s.id.slice(0, 8)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {isAdding && (
+        <Modal title="Enrol Student" onClose={() => setIsAdding(false)}>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="label">Student Name</label>
+              <input required className="input" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+            </div>
+            <div>
+              <label className="label">Current Class</label>
+              <select className="input" value={formData.class} onChange={e => setFormData({...formData, class: e.target.value})}>
+                {['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'].map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <button className="button-primary w-full py-3 mt-4 text-white">Save Student</button>
+          </form>
+        </Modal>
+      )}
+    </motion.div>
+  );
+}
+
+function LibraryView({ syllabus, onUpdate }: any) {
+  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [formData, setFormData] = useState({ title: '', fileType: 'pdf' as 'pdf' | 'jpg', fileData: '' });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({...formData, fileData: reader.result as string, fileType: file.type.includes('pdf') ? 'pdf' : 'jpg'});
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsProcessing(true);
+    const res = await fetch('/api/school/syllabus', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData) 
+    });
+    setIsProcessing(false);
+    if (res.ok) {
+      setIsUploading(false);
+      onUpdate();
+    } else {
+      alert('Failed to upload syllabus');
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-display font-bold">Curriculum Library</h1>
+        <button onClick={() => setIsUploading(true)} className="bg-indigo-600 text-white px-5 py-2.5 rounded-full font-medium flex items-center gap-2 italic">
+          <Upload className="w-5 h-5" /> Upload Syllabus
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {syllabus.map((s: any) => (
+          <div key={s.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm group hover:border-indigo-200 transition-all">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-gray-50 text-gray-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 rounded-lg transition-colors">
+                <FileText className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-gray-900">{s.title}</h3>
+            </div>
+            <p className="text-xs text-gray-400 line-clamp-3 mb-4">{s.content}</p>
+            <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-widest text-gray-300 group-hover:text-indigo-300">
+              <span>{s.fileType} format</span>
+              <span>{new Date(s.createdAt).toLocaleDateString()}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {isUploading && (
+        <Modal title="Upload Course Content" onClose={() => setIsUploading(false)}>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="label">Content Title</label>
+              <input required className="input" placeholder="e.g. 10th Grade Physics - Optics" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            </div>
+            <div className="border-2 border-dashed border-gray-100 rounded-2xl p-8 text-center bg-gray-50 hover:bg-indigo-50 transition-colors group cursor-pointer relative">
+              <input type="file" required accept="image/*,.pdf" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
+              <Upload className="w-10 h-10 text-gray-300 mx-auto mb-2 group-hover:text-indigo-600 transition-colors" />
+              <p className="text-sm font-medium text-gray-600">{formData.fileData ? 'File attached' : 'Click or Drag Syllabus (PDF/JPG)'}</p>
+            </div>
+            <button disabled={isProcessing} className="button-primary w-full py-4 mt-6 flex items-center justify-center gap-2 text-white">
+              {isProcessing ? <><Loader2 className="w-5 h-5 animate-spin" /> Processing with AI...</> : 'Ingest to Library'}
+            </button>
+          </form>
+        </Modal>
+      )}
+    </motion.div>
+  );
+}
+
+function GeneratorView({ syllabus }: any) {
+  const [step, setStep] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [config, setConfig] = useState({
+    schoolName: '',
+    examTitle: 'Unit Test 1',
+    subject: 'English',
+    maxMarks: 50,
+    duration: '',
+    difficulty: 'Medium',
+    sections: [
+      { id: '1', title: 'Multiple Choice', count: 5, marks: 1 },
+      { id: '2', title: 'Fill in the blanks', count: 5, marks: 1 },
+      { id: '3', title: 'Short Answers', count: 5, marks: 2 },
+      { id: '4', title: 'Long Answers', count: 2, marks: 5 },
+    ]
+  });
+  const [selectedSyllabus, setSelectedSyllabus] = useState('');
+  const [generatedPaper, setGeneratedPaper] = useState<any>(null);
+
+  const EXAM_TITLES = ['Lesson Test', 'Grand Test', 'Unit Test 1', 'Unit Test 2', 'Unit Test 3', 'Unit Test 4', 'Summative Assessment 1', 'Summative Assessment 2'];
+  const SUBJECTS = ['Telugu', 'Hindi', 'English', 'Maths', 'Science', 'Physics', 'Biology', 'Social'];
+  const MARKS = [20, 25, 40, 50, 80, 100];
+  const DIFFICULTY = ['Easy', 'Medium', 'Hard', 'Mixed'];
+
+  const handleGenerate = async () => {
+    if (!selectedSyllabus) return alert('Select a syllabus first');
+    setIsLoading(true);
+    const res = await fetch('/api/school/generate-paper', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ syllabusId: selectedSyllabus, config })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setGeneratedPaper(data);
+    } else {
+      const data = await res.json();
+      alert(data.error || 'Failed to generate paper');
+    }
+    setIsLoading(false);
+  };
+
+  const paperRef = useRef(null);
+  const handlePrint = useReactToPrint({
+    contentRef: paperRef,
+  });
+
+  if (generatedPaper) {
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+        <div className="flex justify-between items-center sticky top-0 bg-gray-50 py-4 z-20">
+          <h1 className="text-3xl font-display font-bold">Paper Preview</h1>
+          <div className="flex gap-3">
+            <button onClick={() => setGeneratedPaper(null)} className="px-6 py-2 bg-white border border-gray-200 rounded-full font-bold">Back</button>
+            <button onClick={() => (handlePrint as any)()} className="bg-indigo-600 text-white px-6 py-2 rounded-full font-bold flex items-center gap-2">
+              <Printer className="w-4 h-4" /> Print / Download
+            </button>
+          </div>
+        </div>
+        
+        <div className="bg-white p-1 shadow-xl rounded-sm max-w-[210mm] mx-auto overflow-hidden">
+          <PrintPaper ref={paperRef} paper={generatedPaper} />
+        </div>
+        
+        <div className="bg-indigo-900 text-white p-12 rounded-[40px] mt-12">
+          <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+            <Sparkles className="w-6 h-6" /> AI Answer Key
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {generatedPaper.sections.map((s: any) => (
+              <div key={s.id}>
+                <h3 className="font-bold border-b border-white/20 pb-2 mb-4 uppercase tracking-widest text-xs opacity-60">{s.title}</h3>
+                <div className="space-y-4">
+                  {s.questions.map((q: any, i: number) => (
+                    <div key={i} className="text-sm">
+                      <span className="font-bold mr-2 text-indigo-300">Q{i+1}.</span>
+                      <span className="opacity-80">Ans: {q.answer}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <header className="mb-12">
+        <h1 className="text-4xl font-display font-bold mb-2">Paper Generator</h1>
+        <p className="text-gray-400">Design custom assessments in seconds using AI.</p>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        <div className="lg:col-span-2 space-y-8">
+          {/* Step 1: Syllabus Selection */}
+          <section className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm relative">
+             <div className="w-12 h-12 bg-gray-900 text-white rounded-2xl flex items-center justify-center font-bold absolute -top-6 left-8 shadow-xl">1</div>
+             <h2 className="text-xl font-bold mb-6 mt-2">Target Content</h2>
+             <div className="grid grid-cols-1 gap-3">
+               {syllabus.map((s: any) => (
+                 <button 
+                  key={s.id} 
+                  onClick={() => setSelectedSyllabus(s.id)}
+                  className={`p-4 rounded-2xl border text-left flex items-center justify-between group transition-all ${selectedSyllabus === s.id ? 'border-indigo-600 bg-indigo-50' : 'border-gray-100 bg-gray-50'}`}
+                 >
+                   <div>
+                     <div className={`font-bold ${selectedSyllabus === s.id ? 'text-indigo-600' : 'text-gray-900'}`}>{s.title}</div>
+                     <div className="text-xs text-gray-400">{s.content.slice(0, 100)}...</div>
+                   </div>
+                   <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${selectedSyllabus === s.id ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200'}`}>
+                     {selectedSyllabus === s.id && <CheckCircle2 className="w-4 h-4" />}
+                   </div>
+                 </button>
+               ))}
+               {syllabus.length === 0 && <div className="text-center py-8 text-gray-400 text-sm">No syllabus uploaded yet.</div>}
+             </div>
+          </section>
+
+          {/* Step 2: Meta Config */}
+          <section className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm relative">
+             <div className="w-12 h-12 bg-gray-900 text-white rounded-2xl flex items-center justify-center font-bold absolute -top-6 left-8 shadow-xl">2</div>
+             <h2 className="text-xl font-bold mb-6 mt-2">Exam Meta</h2>
+             <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="label">School Name (Header)</label>
+                  <input className="input" placeholder="Enter school name" value={config.schoolName} onChange={e => setConfig({...config, schoolName: e.target.value})} />
+                </div>
+                <div>
+                  <label className="label">Exam Title</label>
+                  <select className="input" value={config.examTitle} onChange={e => setConfig({...config, examTitle: e.target.value})}>
+                    {EXAM_TITLES.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Subject</label>
+                  <select className="input" value={config.subject} onChange={e => setConfig({...config, subject: e.target.value})}>
+                    {SUBJECTS.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Max Marks</label>
+                  <select className="input" value={config.maxMarks} onChange={e => setConfig({...config, maxMarks: Number(e.target.value)})}>
+                    {MARKS.map(m => <option key={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Duration</label>
+                  <input className="input" placeholder="e.g. 1hr 30min" value={config.duration} onChange={e => setConfig({...config, duration: e.target.value})} />
+                </div>
+                <div>
+                  <label className="label">Difficulty</label>
+                  <select className="input" value={config.difficulty} onChange={e => setConfig({...config, difficulty: e.target.value})}>
+                    {DIFFICULTY.map(d => <option key={d}>{d}</option>)}
+                  </select>
+                </div>
+             </div>
+          </section>
+
+          {/* Step 3: Sections */}
+          <section className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm relative">
+             <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center font-bold absolute -top-6 left-8 shadow-xl">3</div>
+             <div className="flex justify-between items-center mb-6 mt-2">
+                <h2 className="text-xl font-bold">Structure</h2>
+                <button 
+                  onClick={() => setConfig({...config, sections: [...config.sections, {id: Math.random().toString(), title: 'New Section', count: 1, marks: 1}]})}
+                  className="flex items-center gap-1 text-xs font-bold text-indigo-600 uppercase tracking-widest"
+                >
+                  <Plus className="w-4 h-4" /> Add Section
+                </button>
+             </div>
+             
+             <div className="space-y-3">
+               {config.sections.map((section, idx) => (
+                 <div key={section.id} className="grid grid-cols-12 gap-3 items-end bg-gray-50 p-4 rounded-2xl">
+                    <div className="col-span-5">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 mb-1 block">Title</label>
+                      <input className="input-small" value={section.title} onChange={e => {
+                        const newSections = [...config.sections];
+                        newSections[idx].title = e.target.value;
+                        setConfig({...config, sections: newSections});
+                      }} />
+                    </div>
+                    <div className="col-span-3">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 mb-1 block">Count</label>
+                      <input type="number" className="input-small" value={section.count} onChange={e => {
+                        const newSections = [...config.sections];
+                        newSections[idx].count = Number(e.target.value);
+                        setConfig({...config, sections: newSections});
+                      }} />
+                    </div>
+                    <div className="col-span-3">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 mb-1 block">Marks/Q</label>
+                      <input type="number" className="input-small" value={section.marks} onChange={e => {
+                        const newSections = [...config.sections];
+                        newSections[idx].marks = Number(e.target.value);
+                        setConfig({...config, sections: newSections});
+                      }} />
+                    </div>
+                    <button className="col-span-1 p-2 text-gray-300 hover:text-red-500" onClick={() => {
+                        const newSections = config.sections.filter((_, i) => i !== idx);
+                        setConfig({...config, sections: newSections});
+                    }}><X className="w-5 h-5"/></button>
+                 </div>
+               ))}
+             </div>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+           <div className="bg-gray-900 text-white p-8 rounded-[40px] sticky top-8 shadow-2xl">
+              <h2 className="text-2xl font-bold mb-6">Build Paper</h2>
+              <div className="space-y-4 mb-8">
+                <SummaryItem label="Syllabus" value={selectedSyllabus ? syllabus.find((s:any) => s.id === selectedSyllabus)?.title : 'Not chosen'} active={!!selectedSyllabus} />
+                <SummaryItem label="Level" value={config.difficulty} />
+                <SummaryItem label="Sections" value={config.sections.length} />
+                <SummaryItem label="Total Marks" value={config.sections.reduce((acc, s) => acc + (s.count * s.marks), 0)} />
+              </div>
+              <button 
+                disabled={!selectedSyllabus || isLoading}
+                onClick={handleGenerate}
+                className="w-full bg-indigo-500 hover:bg-indigo-400 py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isLoading ? <><Loader2 className="w-6 h-6 animate-spin" /> Cooking...</> : <><Sparkles className="w-6 h-6" /> Generate with AI</>}
+              </button>
+           </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function SummaryItem({ label, value, active = true }: any) {
+  return (
+    <div className="flex justify-between items-center text-sm">
+      <span className="opacity-50 font-medium">{label}</span>
+      <span className={`font-bold ${!active ? 'text-red-400' : 'text-indigo-400'}`}>{value}</span>
+    </div>
+  );
+}
+
+
+const PrintPaper = forwardRef<HTMLDivElement, { paper: any }>(({ paper }, ref) => {
+  return (
+    <div ref={ref} className="bg-white p-[5mm] text-gray-900 border" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', boxSizing: 'border-box' }}>
+      <style>{`
+        @page {
+          size: A4;
+          margin: 0.5cm;
+        }
+        @media print {
+          body { -webkit-print-color-adjust: exact; }
+          .print-container { margin: 0; border: none; }
+        }
+      `}</style>
+      <header className="text-center border-b-2 border-gray-900 pb-4 mb-6">
+        <h1 style={{ fontSize: '16px' }} className="font-bold uppercase tracking-tight mb-1">{paper.schoolName}</h1>
+        <h2 style={{ fontSize: '14px' }} className="font-bold text-gray-700 mb-4">{paper.examTitle}</h2>
+        
+        <div className="grid grid-cols-2 gap-x-12 gap-y-2 text-left" style={{ fontSize: '12px' }}>
+          <div><span className="font-bold">Student Name:</span> ___________________________________</div>
+          <div><span className="font-bold">Subject:</span> {paper.subject}</div>
+          <div><span className="font-bold">Roll No:</span> ____________</div>
+          <div className="flex justify-between">
+            <span><span className="font-bold">Max Marks:</span> {paper.maxMarks}</span>
+            <span><span className="font-bold">Duration:</span> {paper.duration}</span>
+          </div>
+        </div>
+      </header>
+
+      {paper.sections.map((section: any) => (
+        <div key={section.id} className="mb-8">
+          <div className="flex justify-between items-center border-b border-gray-100 mb-4 pb-1">
+             <h3 style={{ fontSize: '12px' }} className="font-bold uppercase tracking-widest">{section.title}</h3>
+             <span style={{ fontSize: '10px' }} className="italic opacity-60 font-bold">({section.questions.length} Questions × {section.questions[0]?.marks} Marks each)</span>
+          </div>
+          
+          <div className="space-y-6">
+            {section.questions.map((q: any, i: number) => (
+              <div key={i} className="break-inside-avoid" style={{ fontSize: '12px' }}>
+                <div className="flex gap-2 font-medium mb-1">
+                  <span className="shrink-0 font-bold">{i + 1}.</span>
+                  <p className="flex-1">{q.text}</p>
+                  <span className="shrink-0 font-bold" style={{ fontSize: '10px' }}>[{q.marks}M]</span>
+                </div>
+                
+                {q.options && (
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-2 ml-6 mb-2">
+                    {q.options.map((opt: string, oi: number) => (
+                      <div key={oi} className="flex gap-2 items-start">
+                        <span className="font-bold">{String.fromCharCode(64 + oi + 1)})</span>
+                        <span>{opt}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Space lines for answers */}
+                <div className="ml-6 mt-3 space-y-3">
+                  {Array.from({ length: q.type === 'long' ? 15 : q.type === 'short' ? 5 : q.type === 'fill_blanks' ? 1 : 0 }).map((_, li) => (
+                    <div key={li} className="border-b border-gray-200 h-1 w-full opacity-50"></div>
+                  ))}
+                  {q.type === 'mcq' && <div className="h-2"></div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+});
+
+PrintPaper.displayName = 'PrintPaper';
+
+// --- Assessments List View ---
+function AssessmentsView() {
+  const [papers, setPapers] = useState<any[]>([]);
+  const [isEvaluating, setIsEvaluating] = useState<string | null>(null);
+  const [students, setStudents] = useState<any[]>([]);
+  const [evalData, setEvalData] = useState({ studentId: '', fileData: '', fileType: 'pdf' });
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/school/students').then(r => r.json()).then(data => setStudents(Array.isArray(data) ? data : []));
+    fetch('/api/school/assessments-list').then(r => r.json()).then(data => setPapers(Array.isArray(data) ? data : []));
+  }, []);
+
+  const handleEvaluate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsProcessing(true);
+    const res = await fetch('/api/school/evaluate-paper', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...evalData, paperId: isEvaluating })
+    });
+    setIsProcessing(false);
+    if (res.ok) {
+      setIsEvaluating(null);
+      alert('Paper evaluated successfully and stored in student database.');
+    } else {
+      const resp = await res.json();
+      alert(resp.error || 'Failed to evaluate paper');
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <h1 className="text-3xl font-display font-bold mb-8">Assessment Library</h1>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {papers.map((p: any) => (
+          <div key={p.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
+             <div className="flex justify-between items-start mb-4">
+                <div>
+                   <h2 className="font-bold text-gray-900">{p.examTitle}</h2>
+                   <p className="text-xs text-gray-400 capitalize">{p.subject} • {p.maxMarks} Marks</p>
+                </div>
+                <button onClick={() => setIsEvaluating(p.id)} className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase italic">Evaluate Logic</button>
+             </div>
+             <div className="flex gap-2">
+                <button className="flex-1 text-xs py-2 bg-gray-50 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 font-bold">Preview</button>
+                <button className="flex-1 text-xs py-2 bg-gray-900 text-white rounded-xl hover:opacity-90 font-bold">Print PDF</button>
+             </div>
+          </div>
+        ))}
+        {papers.length === 0 && <div className="col-span-full py-20 text-center text-gray-400">Genereate papers to see them here.</div>}
+      </div>
+
+      {isEvaluating && (
+        <Modal title="Evaluate Student Submission" onClose={() => setIsEvaluating(null)}>
+           <form onSubmit={handleEvaluate} className="space-y-4">
+              <div>
+                 <label className="label">Select Student</label>
+                 <select className="input" required value={evalData.studentId} onChange={e => setEvalData({...evalData, studentId: e.target.value})}>
+                    <option value="">Choose student...</option>
+                    {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.class})</option>)}
+                 </select>
+              </div>
+              <div className="border-2 border-dashed border-gray-100 rounded-2xl p-8 text-center bg-gray-50 hover:bg-indigo-50 transition-colors group cursor-pointer relative">
+                <input type="file" required accept="image/*,.pdf" onChange={(e) => {
+                   const file = e.target.files?.[0];
+                   if (file) {
+                     const r = new FileReader();
+                     r.onloadend = () => setEvalData({...evalData, fileData: r.result as string, fileType: file.type.includes('pdf') ? 'pdf' : 'jpg'});
+                     r.readAsDataURL(file);
+                   }
+                }} className="absolute inset-0 opacity-0 cursor-pointer" />
+                <Upload className="w-10 h-10 text-gray-300 mx-auto mb-2 group-hover:text-indigo-600 transition-colors" />
+                <p className="text-sm font-medium text-gray-600">{evalData.fileData ? 'Submission attached' : 'Upload Student Answer Script'}</p>
+              </div>
+              <button disabled={isProcessing} className="button-primary w-full py-4 mt-6 flex items-center justify-center gap-2 text-white">
+                {isProcessing ? <><Loader2 className="w-5 h-5 animate-spin" /> Evaluating with AI...</> : 'Correct & Score'}
+              </button>
+           </form>
+        </Modal>
+      )}
+    </motion.div>
+  );
+}
+
+function PerformanceView({ students }: any) {
+  const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
+  const [results, setResults] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (selectedStudent) {
+      fetch(`/api/school/results?studentId=${selectedStudent}`).then(r => r.json()).then(data => setResults(Array.isArray(data) ? data : []));
+    }
+  }, [selectedStudent]);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <h1 className="text-3xl font-display font-bold mb-8">Performance Analytics</h1>
+      
+      {!selectedStudent ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {students.map((s: any) => (
+            <button key={s.id} onClick={() => setSelectedStudent(s.id)} className="bg-white p-6 rounded-3xl border border-gray-100 hover:border-indigo-600 text-left transition-all group shadow-sm">
+               <h3 className="font-bold text-gray-900 group-hover:text-indigo-600">{s.name}</h3>
+               <p className="text-xs text-gray-400">Class {s.class}</p>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-6">
+           <button onClick={() => setSelectedStudent(null)} className="text-xs font-bold text-indigo-600 mb-4">← Back to students</button>
+           <h2 className="text-2xl font-bold">{students.find((s:any) => s.id === selectedStudent)?.name} - Profile</h2>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+             {results.map((r: any) => (
+               <div key={r.id} className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm">
+                  <div className="flex justify-between items-start mb-6">
+                     <div>
+                        <div className="text-xs font-bold uppercase tracking-widest text-gray-300">Assessment</div>
+                        <h4 className="text-xl font-bold">Paper: {r.paperId.slice(0,8)}</h4>
+                     </div>
+                     <div className="text-center">
+                        <div className="text-4xl font-display font-bold text-indigo-600">{r.grade}</div>
+                        <div className="text-[10px] font-bold text-gray-400">GRADE</div>
+                     </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                     <div className="flex justify-between items-center py-3 border-b border-gray-50">
+                        <span className="text-sm font-medium text-gray-500">Score</span>
+                        <span className="font-bold">{r.marksSecured} / {r.totalMarks}</span>
+                     </div>
+                     <div>
+                        <div className="text-[10px] uppercase font-bold text-green-600 mb-2">Strengths</div>
+                        <div className="flex flex-wrap gap-1">
+                           {r.analytics.areasGood.map((a: string) => <span key={a} className="text-[10px] px-2 py-0.5 bg-green-50 text-green-700 rounded-md font-bold">{a}</span>)}
+                        </div>
+                     </div>
+                     <div>
+                        <div className="text-[10px] uppercase font-bold text-red-600 mb-2">Needs Improvement</div>
+                        <div className="flex flex-wrap gap-1">
+                           {r.analytics.areasPoor.map((a: string) => <span key={a} className="text-[10px] px-2 py-0.5 bg-red-50 text-red-700 rounded-md font-bold">{a}</span>)}
+                        </div>
+                     </div>
+                  </div>
+               </div>
+             ))}
+             {results.length === 0 && <div className="col-span-full py-20 text-center text-gray-400 italic">No assessment records found for this student.</div>}
+           </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// --- Shared Components ---
+
+function Modal({ title, children, onClose }: any) {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-[40px] p-8 md:p-10 max-w-lg w-full shadow-2xl overflow-y-auto max-h-[90vh]">
+        <div className="flex justify-between items-center mb-8">
+          <h2 className="text-2xl font-display font-bold text-gray-900 tracking-tight">{title}</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X className="w-6 h-6" /></button>
+        </div>
+        {children}
+      </motion.div>
+    </div>
+  );
+}

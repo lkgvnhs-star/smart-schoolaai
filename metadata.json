@@ -1,0 +1,8 @@
+{
+  "name": "EduPrep AI - School Management & Assessment System",
+  "description": "A comprehensive school management platform featuring AI-powered question paper generation, automated grading, and student analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
