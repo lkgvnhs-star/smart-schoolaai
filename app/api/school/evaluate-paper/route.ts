@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { studentId, paperId, fileData, fileType } = await req.json();
+  const { studentId, paperId, filePath, fileType } = await req.json();
   
   const { data: paper, error: paperError } = await supabaseAdmin
     .from('papers')
@@ -23,7 +23,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Paper not found' }, { status: 404 });
   }
 
-  const base64Data = fileData.split(',')[1] || fileData;
+  let base64Data = '';
+  if (filePath) {
+    const { data: fileBlob, error: downloadError } = await supabaseAdmin.storage.from('app-files').download(filePath);
+    if (!downloadError && fileBlob) {
+        const arrayBuffer = await fileBlob.arrayBuffer();
+        base64Data = Buffer.from(arrayBuffer).toString('base64');
+    }
+  }
+
+  if (!base64Data) {
+     return NextResponse.json({ error: 'Failed to access file for evaluation' }, { status: 400 });
+  }
 
   const prompt = `
     You are an expert examiner. Correct the attached student answer script based on the following question paper and its answer key.
@@ -74,6 +85,9 @@ export async function POST(req: NextRequest) {
   });
 
   const evaluationData = JSON.parse(response.text || '{}');
+  if (evaluationData.analytics) {
+     evaluationData.analytics.filePath = filePath;
+  }
   
   const { data: result, error: resultError } = await supabaseAdmin
     .from('results')

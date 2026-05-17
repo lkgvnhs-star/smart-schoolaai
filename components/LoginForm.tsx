@@ -31,10 +31,15 @@ export default function LoginForm({ onLoginSuccess }: { onLoginSuccess: (data: a
         });
         
         if (signUpError) {
-          setError(signUpError.message);
+          if (signUpError.message.includes('User already registered') || signUpError.message.includes('already exists')) {
+            setError('Invalid login credentials. Please check your password.');
+          } else {
+            setError(signUpError.message);
+          }
           setIsLoading(false);
           return;
         }
+
         
         data = signUpData as any;
         authError = null;

@@ -21,7 +21,8 @@ import {
   ChevronRight,
   School as SchoolIcon,
   X,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useReactToPrint } from 'react-to-print';
@@ -346,26 +347,46 @@ function StudentsView({ students, onUpdate }: any) {
 function LibraryView({ syllabus, onUpdate }: any) {
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [formData, setFormData] = useState({ title: '', fileType: 'pdf' as 'pdf' | 'jpg', fileData: '' });
+  const [formData, setFormData] = useState({ title: '', fileType: 'pdf' as 'pdf' | 'jpg' });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({...formData, fileData: reader.result as string, fileType: file.type.includes('pdf') ? 'pdf' : 'jpg'});
-      };
-      reader.readAsDataURL(file);
+      setSelectedFile(file);
+      setFormData({...formData, fileType: file.type.includes('pdf') ? 'pdf' : 'jpg'});
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedFile) return;
     setIsProcessing(true);
+
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    if (!userId) {
+       alert("Not logged in");
+       setIsProcessing(false);
+       return;
+    }
+
+    const { v4: uuidv4 } = require('uuid');
+    const ext = selectedFile.name.split('.').pop();
+    const fileId = uuidv4();
+    const filePath = `${userId}/syllabus/${fileId}/${fileId}.${ext}`;
+    
+    const { error: uploadError } = await supabase.storage.from('app-files').upload(filePath, selectedFile);
+    if (uploadError) {
+      alert('Failed to upload to storage: ' + uploadError.message);
+      setIsProcessing(false);
+      return;
+    }
+
     const res = await fetch('/api/school/syllabus', { 
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData) 
+      body: JSON.stringify({ ...formData, filePath }) 
     });
     setIsProcessing(false);
     if (res.ok) {
@@ -374,6 +395,25 @@ function LibraryView({ syllabus, onUpdate }: any) {
     } else {
       alert('Failed to upload syllabus');
     }
+  };
+
+  const handleView = async (filePath: string) => {
+    if (!filePath) return;
+    const { data, error } = await supabase.storage.from('app-files').createSignedUrl(filePath, 60 * 60);
+    if (error || !data) {
+      alert('Failed to get file URL');
+    } else {
+      window.open(data.signedUrl, '_blank');
+    }
+  };
+
+  const handleDelete = async (id: string, filePath: string) => {
+    if (!confirm('Are you sure you want to delete this syllabus?')) return;
+    if (filePath) {
+      await supabase.storage.from('app-files').remove([filePath]);
+    }
+    await fetch(`/api/school/syllabus?id=${id}`, { method: 'DELETE' });
+    onUpdate();
   };
 
   return (
@@ -395,9 +435,15 @@ function LibraryView({ syllabus, onUpdate }: any) {
               <h3 className="font-bold text-gray-900">{s.title}</h3>
             </div>
             <p className="text-xs text-gray-400 line-clamp-3 mb-4">{s.content}</p>
-            <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-widest text-gray-300 group-hover:text-indigo-300">
-              <span>{s.fileType} format</span>
-              <span>{new Date(s.createdAt).toLocaleDateString()}</span>
+            <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-widest text-gray-300 group-hover:text-indigo-300 mb-3">
+              <span>{s.fileType || s.file_type} format</span>
+              <span>{new Date(s.createdAt || s.created_at).toLocaleDateString()}</span>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => handleView(s.fileData || s.file_data)} className="flex-1 py-2 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-100 transition-colors">View File</button>
+              <button onClick={() => handleDelete(s.id, s.fileData || s.file_data)} className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
           </div>
         ))}
@@ -413,7 +459,7 @@ function LibraryView({ syllabus, onUpdate }: any) {
             <div className="border-2 border-dashed border-gray-100 rounded-2xl p-8 text-center bg-gray-50 hover:bg-indigo-50 transition-colors group cursor-pointer relative">
               <input type="file" required accept="image/*,.pdf" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
               <Upload className="w-10 h-10 text-gray-300 mx-auto mb-2 group-hover:text-indigo-600 transition-colors" />
-              <p className="text-sm font-medium text-gray-600">{formData.fileData ? 'File attached' : 'Click or Drag Syllabus (PDF/JPG)'}</p>
+              <p className="text-sm font-medium text-gray-600">{selectedFile ? selectedFile.name : 'Click or Drag Syllabus (PDF/JPG)'}</p>
             </div>
             <button disabled={isProcessing} className="button-primary w-full py-4 mt-6 flex items-center justify-center gap-2 text-white">
               {isProcessing ? <><Loader2 className="w-5 h-5 animate-spin" /> Processing with AI...</> : 'Ingest to Library'}
@@ -748,7 +794,8 @@ function AssessmentsView() {
   const [papers, setPapers] = useState<any[]>([]);
   const [isEvaluating, setIsEvaluating] = useState<string | null>(null);
   const [students, setStudents] = useState<any[]>([]);
-  const [evalData, setEvalData] = useState({ studentId: '', fileData: '', fileType: 'pdf' });
+  const [evalData, setEvalData] = useState({ studentId: '', fileType: 'pdf' as 'pdf' | 'jpg' });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
@@ -758,11 +805,34 @@ function AssessmentsView() {
 
   const handleEvaluate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedFile) return;
     setIsProcessing(true);
+
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    if (!userId) {
+       alert("Not logged in");
+       setIsProcessing(false);
+       return;
+    }
+
+    const { v4: uuidv4 } = require('uuid');
+    const ext = selectedFile.name.split('.').pop();
+    const fileId = uuidv4();
+    const filePath = `${userId}/evaluations/${evalData.studentId}/${fileId}.${ext}`;
+    
+    const { error: uploadError } = await supabase.storage.from('app-files').upload(filePath, selectedFile);
+    
+    if (uploadError) {
+       alert('Upload error: ' + uploadError.message);
+       setIsProcessing(false);
+       return;
+    }
+
     const res = await fetch('/api/school/evaluate-paper', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...evalData, paperId: isEvaluating })
+      body: JSON.stringify({ ...evalData, paperId: isEvaluating, filePath })
     });
     setIsProcessing(false);
     if (res.ok) {
@@ -810,13 +880,12 @@ function AssessmentsView() {
                 <input type="file" required accept="image/*,.pdf" onChange={(e) => {
                    const file = e.target.files?.[0];
                    if (file) {
-                     const r = new FileReader();
-                     r.onloadend = () => setEvalData({...evalData, fileData: r.result as string, fileType: file.type.includes('pdf') ? 'pdf' : 'jpg'});
-                     r.readAsDataURL(file);
+                     setSelectedFile(file);
+                     setEvalData({...evalData, fileType: file.type.includes('pdf') ? 'pdf' : 'jpg'});
                    }
                 }} className="absolute inset-0 opacity-0 cursor-pointer" />
                 <Upload className="w-10 h-10 text-gray-300 mx-auto mb-2 group-hover:text-indigo-600 transition-colors" />
-                <p className="text-sm font-medium text-gray-600">{evalData.fileData ? 'Submission attached' : 'Upload Student Answer Script'}</p>
+                <p className="text-sm font-medium text-gray-600">{selectedFile ? selectedFile.name : 'Upload Student Answer Script'}</p>
               </div>
               <button disabled={isProcessing} className="button-primary w-full py-4 mt-6 flex items-center justify-center gap-2 text-white">
                 {isProcessing ? <><Loader2 className="w-5 h-5 animate-spin" /> Evaluating with AI...</> : 'Correct & Score'}
@@ -837,6 +906,27 @@ function PerformanceView({ students }: any) {
       fetch(`/api/school/results?studentId=${selectedStudent}`).then(r => r.json()).then(data => setResults(Array.isArray(data) ? data : []));
     }
   }, [selectedStudent]);
+
+  const handleViewScript = async (filePath: string) => {
+    if (!filePath) return;
+    const { data, error } = await supabase.storage.from('app-files').createSignedUrl(filePath, 60 * 60);
+    if (error || !data) {
+      alert('Failed to get file URL');
+    } else {
+      window.open(data.signedUrl, '_blank');
+    }
+  };
+
+  const handleDeleteResult = async (id: string, filePath?: string) => {
+    if (!confirm('Are you sure you want to delete this result?')) return;
+    if (filePath) {
+      await supabase.storage.from('app-files').remove([filePath]);
+    }
+    await fetch(`/api/school/results?id=${id}`, { method: 'DELETE' });
+    if (selectedStudent) {
+      fetch(`/api/school/results?studentId=${selectedStudent}`).then(r => r.json()).then(data => setResults(Array.isArray(data) ? data : []));
+    }
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -863,6 +953,17 @@ function PerformanceView({ students }: any) {
                      <div>
                         <div className="text-xs font-bold uppercase tracking-widest text-gray-300">Assessment</div>
                         <h4 className="text-xl font-bold">Paper: {r.paperId.slice(0,8)}</h4>
+                        {r.analytics?.filePath && (
+                          <div className="mt-2 flex gap-2">
+                             <button onClick={() => handleViewScript(r.analytics.filePath)} className="text-xs text-indigo-600 hover:text-indigo-800 font-bold underline">View Script</button>
+                             <button onClick={() => handleDeleteResult(r.id, r.analytics.filePath)} className="text-xs text-red-600 hover:text-red-800 font-bold underline">Delete</button>
+                          </div>
+                        )}
+                        {!r.analytics?.filePath && (
+                          <div className="mt-2 flex gap-2">
+                             <button onClick={() => handleDeleteResult(r.id)} className="text-xs text-red-600 hover:text-red-800 font-bold underline">Delete</button>
+                          </div>
+                        )}
                      </div>
                      <div className="text-center">
                         <div className="text-4xl font-display font-bold text-indigo-600">{r.grade}</div>

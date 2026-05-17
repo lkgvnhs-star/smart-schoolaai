@@ -34,5 +34,10 @@ export const supabaseAdmin = {
     const client = getSupabaseAdmin();
     if (!client) throw new Error("Supabase Admin client not initialized");
     return client.auth;
+  },
+  get storage() {
+    const client = getSupabaseAdmin();
+    if (!client) throw new Error("Supabase Admin client not initialized");
+    return client.storage;
   }
 };
