@@ -30,6 +30,19 @@ import {
 import { useRouter } from 'next/navigation';
 import { useReactToPrint } from 'react-to-print';
 import { supabase } from '@/src/supabaseClient';
+import { 
+  LineChart, 
+  Line, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Legend,
+  Cell
+} from 'recharts';
 
 interface Section {
   id: string;
@@ -1317,6 +1330,27 @@ function PerformanceView({ students }: any) {
     fetchResults();
   }, [selectedStudent]);
 
+  const chartData = useMemo(() => {
+    return results.map((r: any) => ({
+      name: r.paper?.exam_title || 'Assmt',
+      score: r.marks_secured,
+      percentage: Math.round((r.marks_secured / r.total_marks) * 100),
+      total: r.total_marks,
+      grade: r.grade
+    })).reverse(); // Oldest to newest
+  }, [results]);
+
+  const getGradeColor = (grade: string) => {
+    switch (grade) {
+      case 'A+': case 'A': return '#22c55e';
+      case 'B+': case 'B': return '#84cc16';
+      case 'C+': case 'C': return '#eab308';
+      case 'D': return '#f97316';
+      case 'E': case 'F': return '#ef4444';
+      default: return '#6366f1';
+    }
+  };
+
   const handleViewScript = async (filePath: string) => {
     if (!filePath) return;
     const { data, error } = await supabase.storage.from('app-files').createSignedUrl(filePath, 60 * 60);
@@ -1359,7 +1393,91 @@ function PerformanceView({ students }: any) {
       ) : (
         <div className="space-y-6">
            <button onClick={() => setSelectedStudent(null)} className="text-xs font-bold text-indigo-600 mb-4">← Back to students</button>
-           <h2 className="text-2xl font-bold">{students.find((s:any) => s.id === selectedStudent)?.name} - Profile</h2>
+           <h2 className="text-2xl font-bold mb-8">{students.find((s:any) => s.id === selectedStudent)?.name} - Profile</h2>
+           
+           {results.length > 0 && (
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+               <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm h-[400px]">
+                 <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
+                   <BarChart3 className="w-4 h-4" /> Performance Trend (%)
+                 </h3>
+                 <div className="h-[280px]">
+                   <ResponsiveContainer width="100%" height="100%">
+                     <LineChart data={chartData}>
+                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                       <XAxis 
+                         dataKey="name" 
+                         stroke="#94a3b8" 
+                         fontSize={10} 
+                         tickLine={false} 
+                         axisLine={false}
+                       />
+                       <YAxis 
+                         stroke="#94a3b8" 
+                         fontSize={10} 
+                         tickLine={false} 
+                         axisLine={false}
+                         domain={[0, 100]}
+                         tickFormatter={(val) => `${val}%`}
+                       />
+                       <Tooltip 
+                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                         formatter={(value) => [`${value}%`, 'Percentage']}
+                       />
+                       <Line 
+                         type="monotone" 
+                         dataKey="percentage" 
+                         stroke="#6366f1" 
+                         strokeWidth={3} 
+                         dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }}
+                         activeDot={{ r: 6, strokeWidth: 0 }}
+                         animationDuration={1000}
+                       />
+                     </LineChart>
+                   </ResponsiveContainer>
+                 </div>
+               </div>
+
+               <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm h-[400px]">
+                 <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
+                   <Plus className="w-4 h-4" /> Marks Distribution
+                 </h3>
+                 <div className="h-[280px]">
+                   <ResponsiveContainer width="100%" height="100%">
+                     <BarChart data={chartData}>
+                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                       <XAxis 
+                         dataKey="name" 
+                         stroke="#94a3b8" 
+                         fontSize={10} 
+                         tickLine={false} 
+                         axisLine={false}
+                       />
+                       <YAxis 
+                         stroke="#94a3b8" 
+                         fontSize={10} 
+                         tickLine={false} 
+                         axisLine={false}
+                       />
+                       <Tooltip 
+                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                         formatter={(value, name, props) => [`${value} / ${props.payload.total}`, 'Score']}
+                       />
+                       <Bar 
+                         dataKey="score" 
+                         radius={[6, 6, 0, 0]}
+                         animationDuration={1500}
+                       >
+                         {chartData.map((entry, index) => (
+                           <Cell key={`cell-${index}`} fill={getGradeColor(entry.grade)} />
+                         ))}
+                       </Bar>
+                     </BarChart>
+                   </ResponsiveContainer>
+                 </div>
+               </div>
+             </div>
+           )}
            
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
              {results.map((r: any) => (
