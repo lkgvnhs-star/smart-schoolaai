@@ -47,6 +47,7 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
   const [templates, setTemplates] = useState<any[]>([]);
   const [preloadedTemplate, setPreloadedTemplate] = useState<any>(null);
   const [viewingPaper, setViewingPaper] = useState<any>(null);
+  const [autoPrintMode, setAutoPrintMode] = useState(false);
   const [results, setResults] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -125,7 +126,11 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
       <main className="flex-1 ml-64 p-8">
         <AnimatePresence mode="wait">
           {viewingPaper ? (
-            <PaperPreview paper={viewingPaper} onBack={() => setViewingPaper(null)} />
+            <PaperPreview 
+              paper={viewingPaper} 
+              onBack={() => { setViewingPaper(null); setAutoPrintMode(false); }} 
+              autoPrint={autoPrintMode}
+            />
           ) : (
             <>
               {activeTab === 'overview' && <OverviewView teachers={teachers} students={students} syllabus={syllabusList} papers={papers} onNavigate={setActiveTab} />}
@@ -134,7 +139,7 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
               {activeTab === 'library' && <LibraryView syllabus={syllabusList} onUpdate={fetchData} />}
               {activeTab === 'generator' && <GeneratorView syllabus={syllabusList} templates={templates} onUpdateTemplates={fetchData} initialTemplate={preloadedTemplate} onClearTemplate={() => setPreloadedTemplate(null)} />}
               {activeTab === 'templates' && <TemplatesView templates={templates} onUpdate={fetchData} onUse={(t: any) => { setPreloadedTemplate(t); setActiveTab('generator'); }} />}
-              {activeTab === 'assessments' && <AssessmentsView onPreview={(p: any) => setViewingPaper(p)} />}
+              {activeTab === 'assessments' && <AssessmentsView onAction={(p: any, mode: 'preview' | 'print') => { setViewingPaper(p); setAutoPrintMode(mode === 'print'); }} />}
               {activeTab === 'performance' && <PerformanceView students={students} />}
             </>
           )}
@@ -708,11 +713,22 @@ function LibraryView({ syllabus, onUpdate }: any) {
   );
 }
 
-function PaperPreview({ paper, onBack }: { paper: any, onBack: () => void }) {
+function PaperPreview({ paper, onBack, autoPrint }: { paper: any, onBack: () => void, autoPrint?: boolean }) {
   const paperRef = useRef(null);
   const handlePrint = useReactToPrint({
     contentRef: paperRef,
   });
+
+  useEffect(() => {
+    if (autoPrint) {
+      const timer = setTimeout(() => {
+        if (typeof handlePrint === 'function') {
+          (handlePrint as any)();
+        }
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [autoPrint, handlePrint]);
 
   const displayPaper = {
     schoolName: paper.schoolName || paper.school_name,
@@ -1116,7 +1132,7 @@ const PrintPaper = forwardRef<HTMLDivElement, { paper: any }>(({ paper }, ref) =
 PrintPaper.displayName = 'PrintPaper';
 
 // --- Assessments List View ---
-function AssessmentsView({ onPreview }: { onPreview: (paper: any) => void }) {
+function AssessmentsView({ onAction }: { onAction: (paper: any, mode: 'preview' | 'print') => void }) {
   const [papers, setPapers] = useState<any[]>([]);
   const [isEvaluating, setIsEvaluating] = useState<string | null>(null);
   const [students, setStudents] = useState<any[]>([]);
@@ -1223,8 +1239,8 @@ function AssessmentsView({ onPreview }: { onPreview: (paper: any) => void }) {
                 <button onClick={() => setIsEvaluating(p.id)} className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase italic">Evaluate Logic</button>
              </div>
              <div className="flex gap-2">
-                <button onClick={() => onPreview(p)} className="flex-1 text-xs py-2 bg-gray-50 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 font-bold">Preview</button>
-                <button onClick={() => onPreview(p)} className="flex-1 text-xs py-2 bg-gray-900 text-white rounded-xl hover:opacity-90 font-bold">Print PDF</button>
+                <button onClick={() => onAction(p, 'preview')} className="flex-1 text-xs py-2 bg-gray-50 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 font-bold">Preview</button>
+                <button onClick={() => onAction(p, 'print')} className="flex-1 text-xs py-2 bg-gray-900 text-white rounded-xl hover:opacity-90 font-bold">Print PDF</button>
              </div>
           </div>
         ))}
