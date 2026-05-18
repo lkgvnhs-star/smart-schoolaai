@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, forwardRef } from 'react';
+import { useState, useEffect, useRef, forwardRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -52,7 +52,7 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const urls = [
         '/api/school/teachers',
@@ -80,11 +80,11 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
     } catch (error) {
       console.error("Fetch Data Error:", error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, [schoolId]);
+  }, [fetchData]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -130,6 +130,7 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
               paper={viewingPaper} 
               onBack={() => { setViewingPaper(null); setAutoPrintMode(false); }} 
               autoPrint={autoPrintMode}
+              onPrintComplete={() => setAutoPrintMode(false)}
             />
           ) : (
             <>
@@ -713,49 +714,61 @@ function LibraryView({ syllabus, onUpdate }: any) {
   );
 }
 
-function PaperPreview({ paper, onBack, autoPrint }: { paper: any, onBack: () => void, autoPrint?: boolean }) {
-  const paperRef = useRef(null);
+function PaperPreview({ paper, onBack, autoPrint, onPrintComplete }: { paper: any, onBack: () => void, autoPrint?: boolean, onPrintComplete?: () => void }) {
+  const paperRef = useRef<HTMLDivElement>(null);
+  
+  const displayPaper = useMemo(() => ({
+    schoolName: paper.schoolName || paper.school_name || 'School Name',
+    examTitle: paper.examTitle || paper.exam_title || 'Examination',
+    subject: paper.subject || 'Subject',
+    maxMarks: paper.maxMarks || paper.max_marks || 0,
+    duration: paper.duration || '',
+    sections: paper.sections || []
+  }), [paper]);
+
   const handlePrint = useReactToPrint({
     contentRef: paperRef,
+    documentTitle: displayPaper.examTitle || 'Question_Paper',
+    onAfterPrint: onPrintComplete,
   });
 
+  const onPrintClick = useCallback(() => {
+    if (typeof handlePrint === 'function') {
+      handlePrint();
+    } else {
+      window.print();
+    }
+  }, [handlePrint]);
+
   useEffect(() => {
-    if (autoPrint) {
+    if (autoPrint && typeof handlePrint === 'function') {
       const timer = setTimeout(() => {
-        if (typeof handlePrint === 'function') {
-          (handlePrint as any)();
-        }
-      }, 800);
+        handlePrint();
+      }, 2000);
       return () => clearTimeout(timer);
     }
   }, [autoPrint, handlePrint]);
 
-  const displayPaper = {
-    schoolName: paper.schoolName || paper.school_name,
-    examTitle: paper.examTitle || paper.exam_title,
-    subject: paper.subject,
-    maxMarks: paper.maxMarks || paper.max_marks,
-    duration: paper.duration,
-    sections: paper.sections || []
-  };
-
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="flex justify-between items-center sticky top-0 bg-gray-50 py-4 z-20">
+      <div className="flex justify-between items-center sticky top-0 bg-gray-50 py-4 z-20 print:hidden">
         <h1 className="text-3xl font-display font-bold">Paper Preview</h1>
         <div className="flex gap-3">
-          <button onClick={onBack} className="px-6 py-2 bg-white border border-gray-200 rounded-full font-bold">Back</button>
-          <button onClick={() => (handlePrint as any)()} className="bg-indigo-600 text-white px-6 py-2 rounded-full font-bold flex items-center gap-2">
+          <button onClick={onBack} className="px-6 py-2 bg-white border border-gray-200 rounded-full font-bold hover:bg-gray-50 transition-colors">Back</button>
+          <button 
+            onClick={onPrintClick} 
+            className="bg-indigo-600 text-white px-6 py-2 rounded-full font-bold flex items-center gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+          >
             <Printer className="w-4 h-4" /> Print / Download
           </button>
         </div>
       </div>
       
-      <div className="bg-white p-1 shadow-xl rounded-sm max-w-[210mm] mx-auto overflow-hidden">
+      <div className="bg-white p-1 shadow-xl rounded-sm max-w-[210mm] mx-auto overflow-hidden print:shadow-none print:p-0">
         <PrintPaper ref={paperRef} paper={displayPaper} />
       </div>
       
-      <div className="bg-indigo-900 text-white p-12 rounded-[40px] mt-12 overflow-x-hidden">
+      <div className="bg-indigo-900 text-white p-12 rounded-[40px] mt-12 overflow-x-hidden print:hidden">
         <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
           <Sparkles className="w-6 h-6" /> AI Answer Key
         </h2>
@@ -1060,7 +1073,7 @@ function SummaryItem({ label, value, active = true }: any) {
 
 const PrintPaper = forwardRef<HTMLDivElement, { paper: any }>(({ paper }, ref) => {
   return (
-    <div ref={ref} className="bg-white p-[5mm] text-gray-900 border" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', boxSizing: 'border-box' }}>
+    <div ref={ref} className="bg-white p-[5mm] text-gray-900 border print:border-0" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', boxSizing: 'border-box' }}>
       <style>{`
         @page {
           size: A4;
@@ -1102,7 +1115,7 @@ const PrintPaper = forwardRef<HTMLDivElement, { paper: any }>(({ paper }, ref) =
                   <span className="shrink-0 font-bold" style={{ fontSize: '10px' }}>[{q.marks}M]</span>
                 </div>
                 
-                {Array.isArray(q.options) && (
+                {Array.isArray(q.options) && q.options.length > 0 && !section.title.toLowerCase().includes('fill in the blanks') && (
                   <div className="grid grid-cols-2 gap-x-8 gap-y-2 ml-6 mb-2">
                     {q.options.map((opt: string, oi: number) => (
                       <div key={oi} className="flex gap-2 items-start">
@@ -1115,10 +1128,14 @@ const PrintPaper = forwardRef<HTMLDivElement, { paper: any }>(({ paper }, ref) =
                 
                 {/* Space lines for answers */}
                 <div className="ml-6 mt-3 space-y-3">
-                  {Array.from({ length: q.type === 'long' ? 15 : q.type === 'short' ? 5 : q.type === 'fill_blanks' ? 1 : 0 }).map((_, li) => (
+                  {Array.from({ 
+                    length: q.type === 'long' ? 15 : 
+                            q.type === 'short' ? 5 : 
+                            (q.type === 'fill_blanks' || section.title.toLowerCase().includes('fill in the blanks')) ? 0 : 0 
+                  }).map((_, li) => (
                     <div key={li} className="border-b border-gray-200 h-1 w-full opacity-50"></div>
                   ))}
-                  {q.type === 'mcq' && <div className="h-2"></div>}
+                  {(q.type === 'mcq' || section.title.toLowerCase().includes('multiple choice')) && <div className="h-2"></div>}
                 </div>
               </div>
             ))}

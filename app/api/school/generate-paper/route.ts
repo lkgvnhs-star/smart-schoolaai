@@ -48,8 +48,18 @@ export async function POST(req: NextRequest) {
     Rules:
     1. Only use topics from the provided syllabus.
     2. Adhere strictly to the question count and marks per section.
-    3. Provide the correct answer/answer key for each question.
+    3. Provide the correct answer/answer key for each question in the "answer" field.
     4. Format as requested in the JSON schema.
+    5. For "Fill in the blanks" sections:
+       - The question text MUST include a blank space represented by "________" where the answer should go.
+       - DO NOT provide an "options" array (or keep it empty).
+       - Set "type" to "fill_blanks".
+    6. For "Multiple Choice" sections:
+       - Provide exactly 4 options in the "options" array.
+       - Set "type" to "mcq".
+    7. For "Short Answers" and "Long Answers":
+       - Set "type" to "short" or "long" respectively.
+       - DO NOT provide "options".
   `;
 
   try {
