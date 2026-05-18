@@ -11,10 +11,6 @@ export default function Home() {
   const [session, setSession] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    checkSession();
-  }, []);
-
   const checkSession = async () => {
     const { data } = await supabase.auth.getSession();
     if (data.session?.user) {
@@ -36,6 +32,10 @@ export default function Home() {
     }
     setIsLoading(false);
   };
+
+  useEffect(() => {
+    checkSession();
+  }, []);
 
   if (isLoading) {
     return (

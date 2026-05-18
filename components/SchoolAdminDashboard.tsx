@@ -22,7 +22,10 @@ import {
   School as SchoolIcon,
   X,
   Loader2,
-  Trash2
+  Trash2,
+  Save,
+  Layout,
+  Copy
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useReactToPrint } from 'react-to-print';
@@ -41,6 +44,9 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
   const [students, setStudents] = useState<any[]>([]);
   const [syllabusList, setSyllabusList] = useState<any[]>([]);
   const [papers, setPapers] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [preloadedTemplate, setPreloadedTemplate] = useState<any>(null);
+  const [viewingPaper, setViewingPaper] = useState<any>(null);
   const [results, setResults] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -52,9 +58,10 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
         '/api/school/students',
         '/api/school/syllabus',
         '/api/school/assessments-list',
+        '/api/school/templates',
       ];
       const fetchResults = await Promise.all(urls.map(url => fetch(url)));
-      const [t, s, syl, p] = await Promise.all(fetchResults.map(async (r) => {
+      const [t, s, syl, p, tmpl] = await Promise.all(fetchResults.map(async (r) => {
         if (!r.ok) return [];
         try {
           return await r.json();
@@ -68,6 +75,7 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
       setStudents(Array.isArray(s) ? s : []);
       setSyllabusList(Array.isArray(syl) ? syl : []);
       setPapers(Array.isArray(p) ? p : []);
+      setTemplates(Array.isArray(tmpl) ? tmpl : []);
     } catch (error) {
       console.error("Fetch Data Error:", error);
     }
@@ -116,13 +124,20 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
       {/* Main Content */}
       <main className="flex-1 ml-64 p-8">
         <AnimatePresence mode="wait">
-          {activeTab === 'overview' && <OverviewView teachers={teachers} students={students} syllabus={syllabusList} papers={papers} onNavigate={setActiveTab} />}
-          {activeTab === 'teachers' && <TeachersView teachers={teachers} onUpdate={fetchData} />}
-          {activeTab === 'students' && <StudentsView students={students} onUpdate={fetchData} />}
-          {activeTab === 'library' && <LibraryView syllabus={syllabusList} onUpdate={fetchData} />}
-          {activeTab === 'generator' && <GeneratorView syllabus={syllabusList} />}
-          {activeTab === 'assessments' && <AssessmentsView />}
-          {activeTab === 'performance' && <PerformanceView students={students} />}
+          {viewingPaper ? (
+            <PaperPreview paper={viewingPaper} onBack={() => setViewingPaper(null)} />
+          ) : (
+            <>
+              {activeTab === 'overview' && <OverviewView teachers={teachers} students={students} syllabus={syllabusList} papers={papers} onNavigate={setActiveTab} />}
+              {activeTab === 'teachers' && <TeachersView teachers={teachers} onUpdate={fetchData} />}
+              {activeTab === 'students' && <StudentsView students={students} onUpdate={fetchData} />}
+              {activeTab === 'library' && <LibraryView syllabus={syllabusList} onUpdate={fetchData} />}
+              {activeTab === 'generator' && <GeneratorView syllabus={syllabusList} templates={templates} onUpdateTemplates={fetchData} initialTemplate={preloadedTemplate} onClearTemplate={() => setPreloadedTemplate(null)} />}
+              {activeTab === 'templates' && <TemplatesView templates={templates} onUpdate={fetchData} onUse={(t: any) => { setPreloadedTemplate(t); setActiveTab('generator'); }} />}
+              {activeTab === 'assessments' && <AssessmentsView onPreview={(p: any) => setViewingPaper(p)} />}
+              {activeTab === 'performance' && <PerformanceView students={students} />}
+            </>
+          )}
         </AnimatePresence>
       </main>
     </div>
@@ -168,7 +183,7 @@ function OverviewView({ teachers, students, syllabus, papers, onNavigate }: any)
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-display font-bold">Good Morning, Admin</h1>
-          <p className="text-gray-400">Here's what's happening at your school today.</p>
+          <p className="text-gray-400">Here&apos;s what&apos;s happening at your school today.</p>
         </div>
         <div className="text-right">
           <div className="text-sm font-bold text-indigo-600">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
@@ -693,9 +708,65 @@ function LibraryView({ syllabus, onUpdate }: any) {
   );
 }
 
-function GeneratorView({ syllabus }: any) {
+function PaperPreview({ paper, onBack }: { paper: any, onBack: () => void }) {
+  const paperRef = useRef(null);
+  const handlePrint = useReactToPrint({
+    contentRef: paperRef,
+  });
+
+  const displayPaper = {
+    schoolName: paper.schoolName || paper.school_name,
+    examTitle: paper.examTitle || paper.exam_title,
+    subject: paper.subject,
+    maxMarks: paper.maxMarks || paper.max_marks,
+    duration: paper.duration,
+    sections: paper.sections || []
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      <div className="flex justify-between items-center sticky top-0 bg-gray-50 py-4 z-20">
+        <h1 className="text-3xl font-display font-bold">Paper Preview</h1>
+        <div className="flex gap-3">
+          <button onClick={onBack} className="px-6 py-2 bg-white border border-gray-200 rounded-full font-bold">Back</button>
+          <button onClick={() => (handlePrint as any)()} className="bg-indigo-600 text-white px-6 py-2 rounded-full font-bold flex items-center gap-2">
+            <Printer className="w-4 h-4" /> Print / Download
+          </button>
+        </div>
+      </div>
+      
+      <div className="bg-white p-1 shadow-xl rounded-sm max-w-[210mm] mx-auto overflow-hidden">
+        <PrintPaper ref={paperRef} paper={displayPaper} />
+      </div>
+      
+      <div className="bg-indigo-900 text-white p-12 rounded-[40px] mt-12 overflow-x-hidden">
+        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <Sparkles className="w-6 h-6" /> AI Answer Key
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {displayPaper.sections?.map((s: any) => (
+            <div key={s.id}>
+              <h3 className="font-bold border-b border-white/20 pb-2 mb-4 uppercase tracking-widest text-xs opacity-60">{s.title}</h3>
+              <div className="space-y-4">
+                {s.questions?.map((q: any, i: number) => (
+                  <div key={i} className="text-sm">
+                    <span className="font-bold mr-2 text-indigo-300">Q{i+1}.</span>
+                    <span className="opacity-80">Ans: {q.answer}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function GeneratorView({ syllabus, templates, onUpdateTemplates, initialTemplate, onClearTemplate }: any) {
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [config, setConfig] = useState({
     schoolName: '',
     examTitle: 'Unit Test 1',
@@ -710,8 +781,55 @@ function GeneratorView({ syllabus }: any) {
       { id: '4', title: 'Long Answers', count: 2, marks: 5 },
     ]
   });
+
+  const applyTemplate = (template: any) => {
+    setConfig({
+      ...config,
+      examTitle: template.name || config.examTitle,
+      subject: template.subject || config.subject,
+      sections: template.sections || config.sections
+    });
+    alert(`Applied template: ${template.name}`);
+  };
+
+  useEffect(() => {
+    if (initialTemplate) {
+      applyTemplate(initialTemplate);
+      onClearTemplate();
+    }
+  }, [initialTemplate, applyTemplate, onClearTemplate]);
+
   const [selectedSyllabus, setSelectedSyllabus] = useState('');
   const [generatedPaper, setGeneratedPaper] = useState<any>(null);
+
+  const handleSaveTemplate = async () => {
+    const name = prompt("Enter a name for this assessment template:");
+    if (!name) return;
+    
+    setIsSavingTemplate(true);
+    try {
+      const res = await fetch('/api/school/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          subject: config.subject,
+          sections: config.sections,
+          description: `Custom ${config.subject} template created by ${config.schoolName || 'user'}`
+        })
+      });
+      if (res.ok) {
+        alert("Template saved successfully! You can reuse this structure later.");
+        onUpdateTemplates();
+      } else {
+        alert("Failed to save template");
+      }
+    } catch (e) {
+      alert("Error saving template");
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
 
   const EXAM_TITLES = ['Lesson Test', 'Grand Test', 'Unit Test 1', 'Unit Test 2', 'Unit Test 3', 'Unit Test 4', 'Summative Assessment 1', 'Summative Assessment 2'];
   const SUBJECTS = ['Telugu', 'Hindi', 'English', 'Maths', 'Science', 'Physics', 'Biology', 'Social'];
@@ -736,50 +854,8 @@ function GeneratorView({ syllabus }: any) {
     setIsLoading(false);
   };
 
-  const paperRef = useRef(null);
-  const handlePrint = useReactToPrint({
-    contentRef: paperRef,
-  });
-
   if (generatedPaper) {
-    return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-        <div className="flex justify-between items-center sticky top-0 bg-gray-50 py-4 z-20">
-          <h1 className="text-3xl font-display font-bold">Paper Preview</h1>
-          <div className="flex gap-3">
-            <button onClick={() => setGeneratedPaper(null)} className="px-6 py-2 bg-white border border-gray-200 rounded-full font-bold">Back</button>
-            <button onClick={() => (handlePrint as any)()} className="bg-indigo-600 text-white px-6 py-2 rounded-full font-bold flex items-center gap-2">
-              <Printer className="w-4 h-4" /> Print / Download
-            </button>
-          </div>
-        </div>
-        
-        <div className="bg-white p-1 shadow-xl rounded-sm max-w-[210mm] mx-auto overflow-hidden">
-          <PrintPaper ref={paperRef} paper={generatedPaper} />
-        </div>
-        
-        <div className="bg-indigo-900 text-white p-12 rounded-[40px] mt-12">
-          <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-            <Sparkles className="w-6 h-6" /> AI Answer Key
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {generatedPaper.sections?.map((s: any) => (
-              <div key={s.id}>
-                <h3 className="font-bold border-b border-white/20 pb-2 mb-4 uppercase tracking-widest text-xs opacity-60">{s.title}</h3>
-                <div className="space-y-4">
-                  {s.questions?.map((q: any, i: number) => (
-                    <div key={i} className="text-sm">
-                      <span className="font-bold mr-2 text-indigo-300">Q{i+1}.</span>
-                      <span className="opacity-80">Ans: {q.answer}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </motion.div>
-    );
+    return <PaperPreview paper={generatedPaper} onBack={() => setGeneratedPaper(null)} />;
   }
 
   return (
@@ -859,13 +935,41 @@ function GeneratorView({ syllabus }: any) {
           <section className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm relative">
              <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center font-bold absolute -top-6 left-8 shadow-xl">3</div>
              <div className="flex justify-between items-center mb-6 mt-2">
-                <h2 className="text-xl font-bold">Structure</h2>
-                <button 
-                  onClick={() => setConfig({...config, sections: [...config.sections, {id: Math.random().toString(), title: 'New Section', count: 1, marks: 1}]})}
-                  className="flex items-center gap-1 text-xs font-bold text-indigo-600 uppercase tracking-widest"
-                >
-                  <Plus className="w-4 h-4" /> Add Section
-                </button>
+                <div className="flex flex-col">
+                  <h2 className="text-xl font-bold">Structure</h2>
+                  <p className="text-[10px] text-gray-400">Define marks and question count</p>
+                </div>
+                <div className="flex gap-4">
+                  {templates.length > 0 && (
+                    <div className="relative group">
+                       <button className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full uppercase tracking-widest">
+                         <Layout className="w-3 h-3" /> Load Template
+                       </button>
+                       <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-100 rounded-2xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 p-2">
+                          <div className="text-[9px] font-bold text-gray-400 mb-1 px-2">YOUR TEMPLATES</div>
+                          {templates.slice(0, 5).map((t: any) => (
+                            <button key={t.id} onClick={() => applyTemplate(t)} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 rounded-lg font-medium text-gray-700 truncate">
+                              {t.name}
+                            </button>
+                          ))}
+                          {templates.length > 5 && <div className="text-[8px] text-center text-gray-300 py-1">And {templates.length - 5} more...</div>}
+                       </div>
+                    </div>
+                  )}
+                  <button 
+                    onClick={handleSaveTemplate}
+                    disabled={isSavingTemplate}
+                    className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-widest"
+                  >
+                    <Save className="w-3 h-3" /> Save Template
+                  </button>
+                  <button 
+                    onClick={() => setConfig({...config, sections: [...config.sections, {id: Math.random().toString(), title: 'New Section', count: 1, marks: 1}]})}
+                    className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase tracking-widest"
+                  >
+                    <Plus className="w-3 h-3" /> Add Section
+                  </button>
+                </div>
              </div>
              
              <div className="space-y-3">
@@ -1012,7 +1116,7 @@ const PrintPaper = forwardRef<HTMLDivElement, { paper: any }>(({ paper }, ref) =
 PrintPaper.displayName = 'PrintPaper';
 
 // --- Assessments List View ---
-function AssessmentsView() {
+function AssessmentsView({ onPreview }: { onPreview: (paper: any) => void }) {
   const [papers, setPapers] = useState<any[]>([]);
   const [isEvaluating, setIsEvaluating] = useState<string | null>(null);
   const [students, setStudents] = useState<any[]>([]);
@@ -1113,14 +1217,14 @@ function AssessmentsView() {
              </button>
              <div className="flex justify-between items-start mb-4 pr-8">
                 <div>
-                   <h2 className="font-bold text-gray-900">{p.examTitle}</h2>
-                   <p className="text-xs text-gray-400 capitalize">{p.subject} • {p.maxMarks} Marks</p>
+                   <h2 className="font-bold text-gray-900">{p.examTitle || p.exam_title}</h2>
+                   <p className="text-xs text-gray-400 capitalize">{p.subject} • {p.maxMarks || p.max_marks} Marks</p>
                 </div>
                 <button onClick={() => setIsEvaluating(p.id)} className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase italic">Evaluate Logic</button>
              </div>
              <div className="flex gap-2">
-                <button className="flex-1 text-xs py-2 bg-gray-50 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 font-bold">Preview</button>
-                <button className="flex-1 text-xs py-2 bg-gray-900 text-white rounded-xl hover:opacity-90 font-bold">Print PDF</button>
+                <button onClick={() => onPreview(p)} className="flex-1 text-xs py-2 bg-gray-50 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 font-bold">Preview</button>
+                <button onClick={() => onPreview(p)} className="flex-1 text-xs py-2 bg-gray-900 text-white rounded-xl hover:opacity-90 font-bold">Print PDF</button>
              </div>
           </div>
         ))}
@@ -1290,5 +1394,74 @@ function Modal({ title, children, onClose }: any) {
         {children}
       </motion.div>
     </div>
+  );
+}
+
+// --- Templates View ---
+function TemplatesView({ templates, onUpdate, onUse }: any) {
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this template?')) return;
+    try {
+      const res = await fetch(`/api/school/templates?id=${id}`, { method: 'DELETE' });
+      if (res.ok) onUpdate();
+      else alert('Failed to delete');
+    } catch (e) { alert('Error'); }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-4xl font-display font-bold mb-2">Assessment Templates</h1>
+          <p className="text-gray-400">Save and load assessment structures for rapid paper generation.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {templates.map((t: any) => (
+          <div key={t.id} className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm hover:shadow-md transition-all group relative">
+            <button 
+              onClick={() => handleDelete(t.id)}
+              className="absolute top-4 right-4 p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
+              <Layout className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-gray-900 text-lg mb-1">{t.name}</h3>
+            <p className="text-xs text-indigo-600 font-bold uppercase tracking-widest mb-4">{t.subject}</p>
+            
+            <div className="space-y-2 mb-6">
+              {t.sections?.map((s: any, i: number) => (
+                <div key={i} className="flex justify-between items-center text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg">
+                  <span className="truncate pr-2 font-medium">{s.title}</span>
+                  <span className="font-bold opacity-60 shrink-0">{s.count} Qs</span>
+                </div>
+              ))}
+            </div>
+
+            <button 
+              onClick={() => onUse(t)}
+              className="w-full py-3 bg-gray-900 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
+            >
+              <Copy className="w-4 h-4" /> Use Template
+            </button>
+
+            <div className="text-[10px] text-gray-400 mt-4 flex items-center gap-1 opacity-60">
+              <Sparkles className="w-3 h-3" />
+              Created {new Date(t.created_at).toLocaleDateString()}
+            </div>
+          </div>
+        ))}
+
+        {templates.length === 0 && (
+          <div className="col-span-full py-20 bg-white rounded-[40px] border border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400">
+             <Layout className="w-12 h-12 mb-4 opacity-20" />
+             <p className="font-medium text-sm">No templates found. Go to &apos;AI Paper Generator&apos; to save one.</p>
+          </div>
+        )}
+      </div>
+    </motion.div>
   );
 }
