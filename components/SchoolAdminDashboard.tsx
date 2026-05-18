@@ -386,6 +386,15 @@ function TeachersView({ teachers, onUpdate }: any) {
   const CLASSES = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'];
   const SUBJECTS = ['Telugu', 'Hindi', 'English', 'Maths', 'Science', 'Physics', 'Biology', 'Social'];
 
+  const handleDeleteTeacher = async (id: string) => {
+    if (!confirm('Are you sure you want to remove this teacher?')) return;
+    try {
+      const res = await fetch(`/api/school/teachers?id=${id}`, { method: 'DELETE' });
+      if (res.ok) onUpdate();
+      else alert('Failed to delete teacher');
+    } catch (e) { alert('Request failed'); }
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <div className="flex justify-between items-center mb-8">
@@ -397,7 +406,13 @@ function TeachersView({ teachers, onUpdate }: any) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {teachers.map((t: any) => (
-          <div key={t.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+          <div key={t.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm relative group">
+            <button 
+              onClick={() => handleDeleteTeacher(t.id)}
+              className="absolute top-4 right-4 p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
             <h3 className="text-xl font-bold mb-2">{t.name}</h3>
             <div className="space-y-2">
               <div className="flex flex-wrap gap-1">
@@ -474,6 +489,15 @@ function StudentsView({ students, onUpdate }: any) {
     onUpdate();
   };
 
+  const handleDeleteStudent = async (id: string) => {
+    if (!confirm('Permanently remove this student? All results will be lost.')) return;
+    try {
+      const res = await fetch(`/api/school/students?id=${id}`, { method: 'DELETE' });
+      if (res.ok) onUpdate();
+      else alert('Failed to delete student');
+    } catch (e) { alert('Request failed'); }
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <div className="flex justify-between items-center mb-8">
@@ -490,14 +514,20 @@ function StudentsView({ students, onUpdate }: any) {
               <th className="px-8 py-4">Name</th>
               <th className="px-8 py-4">Class</th>
               <th className="px-8 py-4">ID</th>
+              <th className="px-8 py-4 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {students.map((s: any) => (
-              <tr key={s.id} className="hover:bg-gray-50 transition-colors">
+              <tr key={s.id} className="hover:bg-gray-50 transition-colors group">
                 <td className="px-8 py-5 font-bold text-gray-900">{s.name}</td>
                 <td className="px-8 py-5 text-gray-600">{s.class}</td>
-                <td className="px-8 py-5 text-xs font-mono text-gray-400">{s.id.slice(0, 8)}</td>
+                <td className="px-8 py-5 text-xs font-mono text-gray-400">{String(s.id).slice(0, 8)}</td>
+                <td className="px-8 py-5 text-right">
+                  <button onClick={() => handleDeleteStudent(s.id)} className="p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -590,11 +620,22 @@ function LibraryView({ syllabus, onUpdate }: any) {
 
   const handleDelete = async (id: string, filePath: string) => {
     if (!confirm('Are you sure you want to delete this syllabus?')) return;
-    if (filePath) {
-      await supabase.storage.from('app-files').remove([filePath]);
+    try {
+      if (filePath) {
+        const { error: storageError } = await supabase.storage.from('app-files').remove([filePath]);
+        if (storageError) console.error("Storage delete error:", storageError);
+      }
+      const res = await fetch(`/api/school/syllabus?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || 'Failed to delete from database');
+      } else {
+        onUpdate();
+      }
+    } catch (e: any) {
+      console.error("Delete Error:", e);
+      alert("Delete failed: " + e.message);
     }
-    await fetch(`/api/school/syllabus?id=${id}`, { method: 'DELETE' });
-    onUpdate();
   };
 
   return (
@@ -763,7 +804,7 @@ function GeneratorView({ syllabus }: any) {
                  >
                    <div>
                      <div className={`font-bold ${selectedSyllabus === s.id ? 'text-indigo-600' : 'text-gray-900'}`}>{s.title}</div>
-                     <div className="text-xs text-gray-400">{s.content.slice(0, 100)}...</div>
+                     <div className="text-xs text-gray-400">{String(s.content || "").slice(0, 100)}...</div>
                    </div>
                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${selectedSyllabus === s.id ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200'}`}>
                      {selectedSyllabus === s.id && <CheckCircle2 className="w-4 h-4" />}
@@ -979,6 +1020,18 @@ function AssessmentsView() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const fetchAssessments = async () => {
+    try {
+      const r = await fetch('/api/school/assessments-list');
+      if (r.ok) {
+        const data = await r.json();
+        setPapers(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch assessments:", e);
+    }
+  };
+
   useEffect(() => {
     const fetchStudents = async () => {
       try {
@@ -992,18 +1045,6 @@ function AssessmentsView() {
       }
     };
     
-    const fetchAssessments = async () => {
-      try {
-        const r = await fetch('/api/school/assessments-list');
-        if (r.ok) {
-          const data = await r.json();
-          setPapers(Array.isArray(data) ? data : []);
-        }
-      } catch (e) {
-        console.error("Failed to fetch assessments:", e);
-      }
-    };
-
     fetchStudents();
     fetchAssessments();
   }, []);
@@ -1049,13 +1090,28 @@ function AssessmentsView() {
     }
   };
 
+  const handleDeleteAssessment = async (id: string) => {
+    if (!confirm('Delete this assessment paper?')) return;
+    try {
+      const res = await fetch(`/api/school/assessments-list?id=${id}`, { method: 'DELETE' });
+      if (res.ok) fetchAssessments();
+      else alert('Failed to delete assessment');
+    } catch (e) { alert('Request failed'); }
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
       <h1 className="text-3xl font-display font-bold mb-8">Assessment Library</h1>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {papers.map((p: any) => (
-          <div key={p.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
-             <div className="flex justify-between items-start mb-4">
+          <div key={p.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all relative group">
+             <button 
+               onClick={() => handleDeleteAssessment(p.id)}
+               className="absolute top-4 right-4 p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+             >
+               <Trash2 className="w-4 h-4" />
+             </button>
+             <div className="flex justify-between items-start mb-4 pr-8">
                 <div>
                    <h2 className="font-bold text-gray-900">{p.examTitle}</h2>
                    <p className="text-xs text-gray-400 capitalize">{p.subject} • {p.maxMarks} Marks</p>
@@ -1106,21 +1162,22 @@ function PerformanceView({ students }: any) {
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
   const [results, setResults] = useState<any[]>([]);
 
-  useEffect(() => {
+  const fetchResults = async () => {
     if (selectedStudent) {
-      const fetchResults = async () => {
-        try {
-          const r = await fetch(`/api/school/results?studentId=${selectedStudent}`);
-          if (r.ok) {
-            const data = await r.json();
-            setResults(Array.isArray(data) ? data : []);
-          }
-        } catch (e) {
-          console.error("Failed to fetch results:", e);
+      try {
+        const r = await fetch(`/api/school/results?studentId=${selectedStudent}`);
+        if (r.ok) {
+          const data = await r.json();
+          setResults(Array.isArray(data) ? data : []);
         }
-      };
-      fetchResults();
+      } catch (e) {
+        console.error("Failed to fetch results:", e);
+      }
     }
+  };
+
+  useEffect(() => {
+    fetchResults();
   }, [selectedStudent]);
 
   const handleViewScript = async (filePath: string) => {
@@ -1135,15 +1192,17 @@ function PerformanceView({ students }: any) {
 
   const handleDeleteResult = async (id: string, filePath?: string) => {
     if (!confirm('Are you sure you want to delete this result?')) return;
-    if (filePath) {
-      await supabase.storage.from('app-files').remove([filePath]);
-    }
-    await fetch(`/api/school/results?id=${id}`, { method: 'DELETE' });
-    if (selectedStudent) {
-      fetch(`/api/school/results?studentId=${selectedStudent}`)
-        .then(r => r.ok ? r.json() : [])
-        .then(data => setResults(Array.isArray(data) ? data : []))
-        .catch(e => console.error("Error refreshing results:", e));
+    try {
+      if (filePath) {
+        await supabase.storage.from('app-files').remove([filePath]);
+      }
+      const res = await fetch(`/api/school/results?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        throw new Error('Failed to delete result');
+      }
+      fetchResults();
+    } catch (e: any) {
+      alert("Delete failed: " + e.message);
     }
   };
 
@@ -1171,7 +1230,7 @@ function PerformanceView({ students }: any) {
                   <div className="flex justify-between items-start mb-6">
                      <div>
                         <div className="text-xs font-bold uppercase tracking-widest text-gray-300">Assessment</div>
-                        <h4 className="text-xl font-bold">Paper: {r.paperId.slice(0,8)}</h4>
+                        <h4 className="text-xl font-bold">Paper: {r.paper?.exam_title || r.paper_id?.slice(0,8)}</h4>
                         {r.analytics?.filePath && (
                           <div className="mt-2 flex gap-2">
                              <button onClick={() => handleViewScript(r.analytics.filePath)} className="text-xs text-indigo-600 hover:text-indigo-800 font-bold underline">View Script</button>
@@ -1193,7 +1252,7 @@ function PerformanceView({ students }: any) {
                   <div className="space-y-4">
                      <div className="flex justify-between items-center py-3 border-b border-gray-50">
                         <span className="text-sm font-medium text-gray-500">Score</span>
-                        <span className="font-bold">{r.marksSecured} / {r.totalMarks}</span>
+                        <span className="font-bold">{r.marks_secured} / {r.total_marks}</span>
                      </div>
                      <div>
                         <div className="text-[10px] uppercase font-bold text-green-600 mb-2">Strengths</div>

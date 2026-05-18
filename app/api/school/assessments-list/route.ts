@@ -17,3 +17,22 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSession();
+  if (!session || !session.schoolId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const id = req.nextUrl.searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
+
+  const { error } = await supabaseAdmin
+    .from('papers')
+    .delete()
+    .eq('id', id)
+    .eq('school_id', session.schoolId);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ success: true });
+}
