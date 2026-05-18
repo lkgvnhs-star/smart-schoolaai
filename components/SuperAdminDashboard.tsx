@@ -33,10 +33,15 @@ export default function SuperAdminDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchSchools = async () => {
-    const res = await fetch('/api/admin/schools');
-    if (res.ok) {
-      const data = await res.json();
-      setSchools(data);
+    try {
+      const res = await fetch('/api/admin/schools');
+      if (res.ok) {
+        const data = await res.json();
+        setSchools(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch schools:", e);
+      setSchools([]);
     }
   };
 
@@ -61,8 +66,12 @@ export default function SuperAdminDashboard() {
       setFormData({ name: '', city: '', plan: 'Basic' });
       fetchSchools();
     } else {
-      const d = await res.json();
-      setErrorMsg(d.error || 'Failed to add school');
+      try {
+        const d = await res.json();
+        setErrorMsg(d.error || 'Failed to add school');
+      } catch (e) {
+        setErrorMsg('Failed to add school (Unexpected response)');
+      }
     }
   };
 
@@ -101,8 +110,12 @@ export default function SuperAdminDashboard() {
       setAdminData({ email: '', password: '' });
       alert('Admin credentials created successfully');
     } else {
-      const data = await res.json();
-      setErrorMsg(data.error || 'Failed to create admin');
+      try {
+        const data = await res.json();
+        setErrorMsg(data.error || 'Failed to create admin');
+      } catch (e) {
+        setErrorMsg('Failed to create admin (Unexpected response)');
+      }
     }
   };
 

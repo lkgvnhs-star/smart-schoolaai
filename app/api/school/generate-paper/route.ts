@@ -4,13 +4,22 @@ import { getSession } from '@/lib/auth';
 import { ai } from '@/lib/gemini';
 import { Type } from '@google/genai';
 
+import { withRetry } from '@/lib/ai-retry';
+import { cleanAiJson } from '@/lib/ai-utils';
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.schoolId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { syllabusId, config } = await req.json();
+  let body;
+  try {
+    body = await req.json();
+  } catch (e) {
+    return NextResponse.json({ error: 'Invalid JSON input' }, { status: 400 });
+  }
+  const { syllabusId, config } = body;
   
   const { data: syllabus, error: syllabusError } = await supabaseAdmin
     .from('syllabus')
@@ -43,59 +52,68 @@ export async function POST(req: NextRequest) {
     4. Format as requested in the JSON schema.
   `;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          sections: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                title: { type: Type.STRING },
-                questions: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      text: { type: Type.STRING },
-                      type: { type: Type.STRING },
-                      options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                      answer: { type: Type.STRING },
-                      marks: { type: Type.NUMBER }
+  try {
+    const response = await withRetry(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            sections: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  title: { type: Type.STRING },
+                  questions: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        text: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        answer: { type: Type.STRING },
+                        marks: { type: Type.NUMBER }
+                      }
                     }
                   }
                 }
               }
             }
-          }
-        },
-        required: ['sections']
+          },
+          required: ['sections']
+        }
       }
-    }
-  });
+    }));
 
-  const paperData = JSON.parse(response.text || '{}');
-  
-  const { data: fullPaper, error: paperError } = await supabaseAdmin
-    .from('papers')
-    .insert([{
-      school_id: session.schoolId,
-      school_name: config.schoolName,
-      exam_title: config.examTitle,
-      subject: config.subject,
-      max_marks: config.maxMarks,
-      duration: config.duration,
-      sections: paperData.sections
-    }])
-    .select()
-    .single();
+    const cleanedText = cleanAiJson(response.text);
+    const paperData = JSON.parse(cleanedText || '{"sections":[]}');
+    
+    const { data: fullPaper, error: paperError } = await supabaseAdmin
+      .from('papers')
+      .insert([{
+        school_id: session.schoolId,
+        school_name: config.schoolName,
+        exam_title: config.examTitle,
+        subject: config.subject,
+        max_marks: config.maxMarks,
+        duration: config.duration,
+        sections: paperData.sections || []
+      }])
+      .select()
+      .single();
 
-  if (paperError) return NextResponse.json({ error: paperError.message }, { status: 500 });
-  return NextResponse.json(fullPaper);
+    if (paperError) return NextResponse.json({ error: paperError.message }, { status: 500 });
+    return NextResponse.json(fullPaper);
+  } catch (aiError: any) {
+    console.error("AI Generation Error:", aiError);
+    return NextResponse.json({ 
+      error: aiError?.message || 'AI Generation Failed',
+      details: aiError?.status || '503'
+    }, { status: 503 });
+  }
 }

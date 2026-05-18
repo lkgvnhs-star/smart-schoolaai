@@ -4,13 +4,22 @@ import { getSession } from '@/lib/auth';
 import { ai } from '@/lib/gemini';
 import { Type } from '@google/genai';
 
+import { withRetry } from '@/lib/ai-retry';
+import { cleanAiJson } from '@/lib/ai-utils';
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.schoolId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { studentId, paperId, filePath, fileType } = await req.json();
+  let body;
+  try {
+    body = await req.json();
+  } catch (e) {
+    return NextResponse.json({ error: 'Invalid JSON input' }, { status: 400 });
+  }
+  const { studentId, paperId, filePath, fileType } = body;
   
   const { data: paper, error: paperError } = await supabaseAdmin
     .from('papers')
@@ -51,57 +60,67 @@ export async function POST(req: NextRequest) {
     6. Provide encouraging feedback.
   `;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { text: prompt },
-          { inlineData: { mimeType: fileType === 'pdf' ? 'application/pdf' : 'image/jpeg', data: base64Data } }
-        ]
-      }
-    ],
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          marksSecured: { type: Type.NUMBER },
-          totalMarks: { type: Type.NUMBER },
-          grade: { type: Type.STRING },
-          analytics: {
-            type: Type.OBJECT,
-            properties: {
-              areasGood: { type: Type.ARRAY, items: { type: Type.STRING } },
-              areasPoor: { type: Type.ARRAY, items: { type: Type.STRING } },
-              feedback: { type: Type.STRING }
+  try {
+    const response = await withRetry(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType: fileType === 'pdf' ? 'application/pdf' : 'image/jpeg', data: base64Data } }
+          ]
+        }
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            marksSecured: { type: Type.NUMBER },
+            totalMarks: { type: Type.NUMBER },
+            grade: { type: Type.STRING },
+            analytics: {
+              type: Type.OBJECT,
+              properties: {
+                areasGood: { type: Type.ARRAY, items: { type: Type.STRING } },
+                areasPoor: { type: Type.ARRAY, items: { type: Type.STRING } },
+                feedback: { type: Type.STRING }
+              }
             }
-          }
-        },
-        required: ['marksSecured', 'totalMarks', 'grade', 'analytics']
+          },
+          required: ['marksSecured', 'totalMarks', 'grade', 'analytics']
+        }
       }
+    }));
+
+    const cleanedText = cleanAiJson(response.text);
+    const evaluationData = JSON.parse(cleanedText || '{"marksSecured":0,"totalMarks":0,"grade":"F","analytics":{"feedback":"AI Evaluation Failed"}}');
+    
+    if (evaluationData.analytics) {
+       evaluationData.analytics.filePath = filePath;
     }
-  });
+    
+    const { data: result, error: resultError } = await supabaseAdmin
+      .from('results')
+      .insert([{
+        student_id: studentId,
+        paper_id: paperId,
+        marks_secured: evaluationData.marksSecured || 0,
+        total_marks: paper.max_marks || evaluationData.totalMarks || 100,
+        grade: evaluationData.grade || 'F',
+        analytics: evaluationData.analytics || {}
+      }])
+      .select()
+      .single();
 
-  const evaluationData = JSON.parse(response.text || '{}');
-  if (evaluationData.analytics) {
-     evaluationData.analytics.filePath = filePath;
+    if (resultError) return NextResponse.json({ error: resultError.message }, { status: 500 });
+    return NextResponse.json(result);
+  } catch (aiError: any) {
+    console.error("AI Evaluation Error:", aiError);
+    return NextResponse.json({ 
+      error: aiError?.message || 'AI Evaluation Failed',
+      details: aiError?.status || '503'
+    }, { status: 503 });
   }
-  
-  const { data: result, error: resultError } = await supabaseAdmin
-    .from('results')
-    .insert([{
-      student_id: studentId,
-      paper_id: paperId,
-      marks_secured: evaluationData.marksSecured,
-      total_marks: paper.max_marks || evaluationData.totalMarks,
-      grade: evaluationData.grade,
-      analytics: evaluationData.analytics
-    }])
-    .select()
-    .single();
-
-  if (resultError) return NextResponse.json({ error: resultError.message }, { status: 500 });
-  return NextResponse.json(result);
 }

@@ -46,15 +46,31 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
   const router = useRouter();
 
   const fetchData = async () => {
-    const urls = [
-      '/api/school/teachers',
-      '/api/school/students',
-      '/api/school/syllabus',
-    ];
-    const [t, s, syl] = await Promise.all(urls.map(url => fetch(url).then(r => r.json())));
-    setTeachers(Array.isArray(t) ? t : []);
-    setStudents(Array.isArray(s) ? s : []);
-    setSyllabusList(Array.isArray(syl) ? syl : []);
+    try {
+      const urls = [
+        '/api/school/teachers',
+        '/api/school/students',
+        '/api/school/syllabus',
+        '/api/school/assessments-list',
+      ];
+      const fetchResults = await Promise.all(urls.map(url => fetch(url)));
+      const [t, s, syl, p] = await Promise.all(fetchResults.map(async (r) => {
+        if (!r.ok) return [];
+        try {
+          return await r.json();
+        } catch (e) {
+          console.error("JSON parse error:", e);
+          return [];
+        }
+      }));
+      
+      setTeachers(Array.isArray(t) ? t : []);
+      setStudents(Array.isArray(s) ? s : []);
+      setSyllabusList(Array.isArray(syl) ? syl : []);
+      setPapers(Array.isArray(p) ? p : []);
+    } catch (error) {
+      console.error("Fetch Data Error:", error);
+    }
   };
 
   useEffect(() => {
@@ -100,7 +116,7 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
       {/* Main Content */}
       <main className="flex-1 ml-64 p-8">
         <AnimatePresence mode="wait">
-          {activeTab === 'overview' && <OverviewView teachers={teachers} students={students} syllabus={syllabusList} />}
+          {activeTab === 'overview' && <OverviewView teachers={teachers} students={students} syllabus={syllabusList} papers={papers} onNavigate={setActiveTab} />}
           {activeTab === 'teachers' && <TeachersView teachers={teachers} onUpdate={fetchData} />}
           {activeTab === 'students' && <StudentsView students={students} onUpdate={fetchData} />}
           {activeTab === 'library' && <LibraryView syllabus={syllabusList} onUpdate={fetchData} />}
@@ -131,46 +147,211 @@ function NavItem({ icon: Icon, label, active, onClick }: any) {
 
 // --- Sub-Views ---
 
-function OverviewView({ teachers, students, syllabus }: any) {
+function OverviewView({ teachers, students, syllabus, papers, onNavigate }: any) {
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const item = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0 }
+  };
+
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-      <h1 className="text-3xl font-display font-bold mb-8">Dashboard Overview</h1>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard icon={Users} label="Total Teachers" value={teachers.length} color="bg-blue-500" />
-        <StatCard icon={UserSquare2} label="Registered Students" value={students.length} color="bg-indigo-500" />
-        <StatCard icon={Library} label="Syllabus Resources" value={syllabus.length} color="bg-purple-500" />
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-8">
+      <div className="flex justify-between items-end">
+        <div>
+          <h1 className="text-3xl font-display font-bold">Good Morning, Admin</h1>
+          <p className="text-gray-400">Here's what's happening at your school today.</p>
+        </div>
+        <div className="text-right">
+          <div className="text-sm font-bold text-indigo-600">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+        </div>
       </div>
-      
-      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm">
-          <h2 className="text-xl font-bold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <button className="p-4 bg-gray-50 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all text-left">
-              <Plus className="w-6 h-6 mb-2" />
-              <div className="font-bold">Add Teacher</div>
-              <div className="text-xs text-gray-400">New staff credentials</div>
-            </button>
-            <button className="p-4 bg-gray-50 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all text-left">
-              <Sparkles className="w-6 h-6 mb-2" />
-              <div className="font-bold">Generate Paper</div>
-              <div className="text-xs text-gray-400">AI paper designer</div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <motion.div variants={item}>
+          <StatCard icon={Users} label="Teachers" value={teachers.length} color="text-blue-600" bgColor="bg-blue-50" />
+        </motion.div>
+        <motion.div variants={item}>
+          <StatCard icon={UserSquare2} label="Students" value={students.length} color="text-indigo-600" bgColor="bg-indigo-50" />
+        </motion.div>
+        <motion.div variants={item}>
+          <StatCard icon={Library} label="Resources" value={syllabus.length} color="text-purple-600" bgColor="bg-purple-50" />
+        </motion.div>
+        <motion.div variants={item}>
+          <StatCard icon={FileText} label="Papers" value={papers.length} color="text-emerald-600" bgColor="bg-emerald-50" />
+        </motion.div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <motion.div variants={item} className="lg:col-span-2 bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold">Quick Actions</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <ActionButton 
+              icon={Plus} 
+              label="Add Teacher" 
+              desc="Staff credentials" 
+              onClick={() => onNavigate('teachers')} 
+              color="text-blue-600"
+              bgColor="hover:bg-blue-50"
+            />
+            <ActionButton 
+              icon={Plus} 
+              label="Add Student" 
+              desc="Enrol new pupil" 
+              onClick={() => onNavigate('students')} 
+              color="text-indigo-600"
+              bgColor="hover:bg-indigo-50"
+            />
+            <ActionButton 
+              icon={Upload} 
+              label="Upload Syllabus" 
+              desc="AI ingestion" 
+              onClick={() => onNavigate('library')} 
+              color="text-purple-600"
+              bgColor="hover:bg-purple-50"
+            />
+            <ActionButton 
+              icon={Sparkles} 
+              label="Generate Paper" 
+              desc="Design assessment" 
+              onClick={() => onNavigate('generator')} 
+              color="text-emerald-600"
+              bgColor="hover:bg-emerald-50"
+            />
+            <ActionButton 
+              icon={Search} 
+              label="Check Performance" 
+              desc="Student analytics" 
+              onClick={() => onNavigate('performance')} 
+              color="text-orange-600"
+              bgColor="hover:bg-orange-50"
+            />
+          </div>
+        </motion.div>
+
+        <motion.div variants={item} className="bg-indigo-900 text-white p-8 rounded-[32px] shadow-xl relative overflow-hidden">
+          <div className="relative z-10">
+            <h2 className="text-xl font-bold mb-6">Syllabus Health</h2>
+            <div className="space-y-6">
+              <ProgressItem label="Content Coverage" value={65} />
+              <ProgressItem label="AI Ingestion" value={88} />
+              <ProgressItem label="Paper Ready" value={42} />
+            </div>
+            <button 
+              onClick={() => onNavigate('library')}
+              className="mt-8 w-full py-3 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
+            >
+              View Library <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-        </div>
+          <Sparkles className="absolute -bottom-8 -right-8 w-32 h-32 text-white/5 rotate-12" />
+        </motion.div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <motion.div variants={item} className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm">
+          <h2 className="text-lg font-bold mb-4">Recent Syllabus</h2>
+          <div className="space-y-4">
+            {syllabus.slice(0, 3).map((s: any) => (
+              <div key={s.id} className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-2xl transition-colors group cursor-pointer" onClick={() => onNavigate('library')}>
+                <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                  <Library className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-bold text-sm">{s.title}</div>
+                  <div className="text-[10px] text-gray-400 uppercase tracking-widest">{new Date(s.createdAt || s.created_at).toLocaleDateString()}</div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-gray-200 group-hover:text-indigo-400" />
+              </div>
+            ))}
+            {syllabus.length === 0 && <p className="text-sm text-gray-400 italic">No syllabus uploaded yet.</p>}
+          </div>
+        </motion.div>
+
+        <motion.div variants={item} className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm">
+          <h2 className="text-lg font-bold mb-4">Paper Statistics</h2>
+          <div className="flex items-center justify-between py-4 border-b border-gray-50">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-sm text-gray-600">Active Assessments</span>
+            </div>
+            <span className="font-bold">{papers.length}</span>
+          </div>
+          <div className="flex items-center justify-between py-4 border-b border-gray-50">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-blue-500" />
+              <span className="text-sm text-gray-600">Total Teachers</span>
+            </div>
+            <span className="font-bold">{teachers.length}</span>
+          </div>
+          <div className="flex items-center justify-between py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-indigo-500" />
+              <span className="text-sm text-gray-600">Total Students</span>
+            </div>
+            <span className="font-bold">{students.length}</span>
+          </div>
+        </motion.div>
       </div>
     </motion.div>
   );
 }
 
-function StatCard({ icon: Icon, label, value, color }: any) {
+function ProgressItem({ label, value }: { label: string, value: number }) {
   return (
-    <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm flex items-center gap-6">
-      <div className={`p-4 rounded-2xl ${color} text-white`}>
-        <Icon className="w-8 h-8" />
+    <div className="space-y-2">
+      <div className="flex justify-between text-xs font-bold uppercase tracking-widest opacity-60">
+        <span>{label}</span>
+        <span>{value}%</span>
+      </div>
+      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+        <motion.div 
+          initial={{ width: 0 }} 
+          animate={{ width: `${value}%` }} 
+          transition={{ duration: 1, ease: "easeOut" }}
+          className="h-full bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.4)]"
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({ icon: Icon, label, desc, onClick, color, bgColor }: any) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`p-4 bg-gray-50 rounded-2xl ${bgColor} transition-all text-left flex flex-col items-start gap-2 group`}
+    >
+      <div className={`p-2 rounded-xl bg-white shadow-sm transition-transform group-hover:scale-110 ${color}`}>
+        <Icon className="w-5 h-5" />
       </div>
       <div>
-        <p className="text-gray-400 text-sm font-medium uppercase tracking-wider">{label}</p>
-        <p className="text-4xl font-display font-bold text-gray-900">{value}</p>
+        <div className="font-bold text-sm">{label}</div>
+        <div className="text-[10px] text-gray-400 group-hover:text-gray-500 transition-colors uppercase tracking-wider font-semibold">{desc}</div>
+      </div>
+    </button>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, color, bgColor }: any) {
+  return (
+    <div className="bg-white p-5 rounded-[24px] border border-gray-100 shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow cursor-default">
+      <div className={`p-3 rounded-xl ${bgColor} ${color}`}>
+        <Icon className="w-6 h-6" />
+      </div>
+      <div>
+        <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest leading-none mb-1">{label}</p>
+        <p className="text-2xl font-display font-bold text-gray-900 leading-none">{value}</p>
       </div>
     </div>
   );
@@ -220,10 +401,10 @@ function TeachersView({ teachers, onUpdate }: any) {
             <h3 className="text-xl font-bold mb-2">{t.name}</h3>
             <div className="space-y-2">
               <div className="flex flex-wrap gap-1">
-                {t.classes.map((c: string) => <span key={c} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md font-bold">{c}</span>)}
+                {t.classes?.map((c: string) => <span key={c} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md font-bold">{c}</span>)}
               </div>
               <div className="flex flex-wrap gap-1">
-                {t.subjects.map((s: string) => <span key={s} className="text-[10px] px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md font-bold uppercase">{s}</span>)}
+                {t.subjects?.map((s: string) => <span key={s} className="text-[10px] px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md font-bold uppercase">{s}</span>)}
               </div>
             </div>
           </div>
@@ -541,11 +722,11 @@ function GeneratorView({ syllabus }: any) {
             <Sparkles className="w-6 h-6" /> AI Answer Key
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {generatedPaper.sections.map((s: any) => (
+            {generatedPaper.sections?.map((s: any) => (
               <div key={s.id}>
                 <h3 className="font-bold border-b border-white/20 pb-2 mb-4 uppercase tracking-widest text-xs opacity-60">{s.title}</h3>
                 <div className="space-y-4">
-                  {s.questions.map((q: any, i: number) => (
+                  {s.questions?.map((q: any, i: number) => (
                     <div key={i} className="text-sm">
                       <span className="font-bold mr-2 text-indigo-300">Q{i+1}.</span>
                       <span className="opacity-80">Ans: {q.answer}</span>
@@ -744,15 +925,15 @@ const PrintPaper = forwardRef<HTMLDivElement, { paper: any }>(({ paper }, ref) =
         </div>
       </header>
 
-      {paper.sections.map((section: any) => (
+      {paper.sections?.map((section: any) => (
         <div key={section.id} className="mb-8">
           <div className="flex justify-between items-center border-b border-gray-100 mb-4 pb-1">
              <h3 style={{ fontSize: '12px' }} className="font-bold uppercase tracking-widest">{section.title}</h3>
-             <span style={{ fontSize: '10px' }} className="italic opacity-60 font-bold">({section.questions.length} Questions × {section.questions[0]?.marks} Marks each)</span>
+             <span style={{ fontSize: '10px' }} className="italic opacity-60 font-bold">({section.questions?.length || 0} Questions × {section.questions?.[0]?.marks || 0} Marks each)</span>
           </div>
           
           <div className="space-y-6">
-            {section.questions.map((q: any, i: number) => (
+            {section.questions?.map((q: any, i: number) => (
               <div key={i} className="break-inside-avoid" style={{ fontSize: '12px' }}>
                 <div className="flex gap-2 font-medium mb-1">
                   <span className="shrink-0 font-bold">{i + 1}.</span>
@@ -760,7 +941,7 @@ const PrintPaper = forwardRef<HTMLDivElement, { paper: any }>(({ paper }, ref) =
                   <span className="shrink-0 font-bold" style={{ fontSize: '10px' }}>[{q.marks}M]</span>
                 </div>
                 
-                {q.options && (
+                {Array.isArray(q.options) && (
                   <div className="grid grid-cols-2 gap-x-8 gap-y-2 ml-6 mb-2">
                     {q.options.map((opt: string, oi: number) => (
                       <div key={oi} className="flex gap-2 items-start">
@@ -799,8 +980,32 @@ function AssessmentsView() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    fetch('/api/school/students').then(r => r.json()).then(data => setStudents(Array.isArray(data) ? data : []));
-    fetch('/api/school/assessments-list').then(r => r.json()).then(data => setPapers(Array.isArray(data) ? data : []));
+    const fetchStudents = async () => {
+      try {
+        const r = await fetch('/api/school/students');
+        if (r.ok) {
+          const data = await r.json();
+          setStudents(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        console.error("Failed to fetch students:", e);
+      }
+    };
+    
+    const fetchAssessments = async () => {
+      try {
+        const r = await fetch('/api/school/assessments-list');
+        if (r.ok) {
+          const data = await r.json();
+          setPapers(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        console.error("Failed to fetch assessments:", e);
+      }
+    };
+
+    fetchStudents();
+    fetchAssessments();
   }, []);
 
   const handleEvaluate = async (e: React.FormEvent) => {
@@ -903,7 +1108,18 @@ function PerformanceView({ students }: any) {
 
   useEffect(() => {
     if (selectedStudent) {
-      fetch(`/api/school/results?studentId=${selectedStudent}`).then(r => r.json()).then(data => setResults(Array.isArray(data) ? data : []));
+      const fetchResults = async () => {
+        try {
+          const r = await fetch(`/api/school/results?studentId=${selectedStudent}`);
+          if (r.ok) {
+            const data = await r.json();
+            setResults(Array.isArray(data) ? data : []);
+          }
+        } catch (e) {
+          console.error("Failed to fetch results:", e);
+        }
+      };
+      fetchResults();
     }
   }, [selectedStudent]);
 
@@ -924,7 +1140,10 @@ function PerformanceView({ students }: any) {
     }
     await fetch(`/api/school/results?id=${id}`, { method: 'DELETE' });
     if (selectedStudent) {
-      fetch(`/api/school/results?studentId=${selectedStudent}`).then(r => r.json()).then(data => setResults(Array.isArray(data) ? data : []));
+      fetch(`/api/school/results?studentId=${selectedStudent}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setResults(Array.isArray(data) ? data : []))
+        .catch(e => console.error("Error refreshing results:", e));
     }
   };
 
@@ -979,13 +1198,13 @@ function PerformanceView({ students }: any) {
                      <div>
                         <div className="text-[10px] uppercase font-bold text-green-600 mb-2">Strengths</div>
                         <div className="flex flex-wrap gap-1">
-                           {r.analytics.areasGood.map((a: string) => <span key={a} className="text-[10px] px-2 py-0.5 bg-green-50 text-green-700 rounded-md font-bold">{a}</span>)}
+                           {r.analytics?.areasGood?.map((a: string) => <span key={a} className="text-[10px] px-2 py-0.5 bg-green-50 text-green-700 rounded-md font-bold">{a}</span>)}
                         </div>
                      </div>
                      <div>
                         <div className="text-[10px] uppercase font-bold text-red-600 mb-2">Needs Improvement</div>
                         <div className="flex flex-wrap gap-1">
-                           {r.analytics.areasPoor.map((a: string) => <span key={a} className="text-[10px] px-2 py-0.5 bg-red-50 text-red-700 rounded-md font-bold">{a}</span>)}
+                           {r.analytics?.areasPoor?.map((a: string) => <span key={a} className="text-[10px] px-2 py-0.5 bg-red-50 text-red-700 rounded-md font-bold">{a}</span>)}
                         </div>
                      </div>
                   </div>
