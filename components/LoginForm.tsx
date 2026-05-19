@@ -55,7 +55,10 @@ export default function LoginForm({ onLoginSuccess }: { onLoginSuccess: (data: a
         const { data: profile } = await supabase.from('profiles').select('role, school_id').eq('id', data.user.id).single();
         
         const role = profile?.role || (email === 'superadmin@gmail.com' ? 'super_admin' : 'school_admin');
-        const userSchoolId = profile?.school_id || data.user.user_metadata?.schoolId || 'demo-school-id';
+        const userSchoolId = profile?.school_id || data.user.user_metadata?.schoolId;
+
+        // In a real app we'd be strict, but for setup/demo we allow login
+        // If schoolId is missing, the dashboard will handle it.
 
         await fetch('/api/auth/set-session', {
           method: 'POST',

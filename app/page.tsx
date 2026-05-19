@@ -16,7 +16,7 @@ export default function Home() {
     if (data.session?.user) {
       const email = data.session.user.email;
       const role = email === 'superadmin@gmail.com' ? 'super_admin' : 'school_admin';
-      const userSchoolId = data.session.user.user_metadata?.schoolId || 'demo-school-id';
+      const userSchoolId = data.session.user.user_metadata?.schoolId;
       
       await fetch('/api/auth/set-session', {
         method: 'POST',

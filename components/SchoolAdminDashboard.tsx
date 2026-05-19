@@ -51,7 +51,7 @@ interface Section {
   marks: number;
 }
 
-export default function SchoolAdminDashboard({ schoolId }: { schoolId: string }) {
+export default function SchoolAdminDashboard({ schoolId }: { schoolId?: string }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [teachers, setTeachers] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -61,12 +61,13 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
   const [preloadedTemplate, setPreloadedTemplate] = useState<any>(null);
   const [viewingPaper, setViewingPaper] = useState<any>(null);
   const [autoPrintMode, setAutoPrintMode] = useState(false);
-  const [results, setResults] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const fetchData = useCallback(async () => {
+    if (!schoolId) return;
     try {
+      setIsLoading(true);
       const urls = [
         '/api/school/teachers',
         '/api/school/students',
@@ -92,8 +93,10 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
       setTemplates(Array.isArray(tmpl) ? tmpl : []);
     } catch (error) {
       console.error("Fetch Data Error:", error);
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
+  }, [schoolId]);
 
   useEffect(() => {
     fetchData();
@@ -104,6 +107,26 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId: string })
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.reload();
   };
+
+  if (!schoolId) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8 text-center">
+        <div className="max-w-md bg-white p-12 rounded-[40px] shadow-xl border border-gray-100">
+          <div className="w-20 h-20 bg-amber-50 text-amber-600 rounded-3xl flex items-center justify-center mx-auto mb-6">
+            <AlertCircle className="w-10 h-10" />
+          </div>
+          <h1 className="text-3xl font-display font-bold mb-4">Account Pending</h1>
+          <p className="text-gray-500 mb-8 leading-relaxed">
+            Your account is active but hasn&apos;t been assigned to a school yet. 
+            Please log in as <strong>superadmin@gmail.com</strong> to create and link schools.
+          </p>
+          <button onClick={handleLogout} className="w-full button-primary py-4 text-white">
+            Return to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
