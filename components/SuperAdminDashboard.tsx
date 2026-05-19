@@ -46,7 +46,10 @@ export default function SuperAdminDashboard() {
   };
 
   useEffect(() => {
-    fetchSchools();
+    const init = async () => {
+      await fetchSchools();
+    };
+    init();
   }, []);
 
   const handleAddSchool = async (e: React.FormEvent) => {

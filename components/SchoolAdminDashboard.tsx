@@ -99,7 +99,10 @@ export default function SchoolAdminDashboard({ schoolId }: { schoolId?: string }
   }, [schoolId]);
 
   useEffect(() => {
-    fetchData();
+    const init = async () => {
+      await fetchData();
+    };
+    init();
   }, [fetchData]);
 
   const handleLogout = async () => {
@@ -847,29 +850,35 @@ function GeneratorView({ syllabus, templates, onUpdateTemplates, initialTemplate
     ]
   });
 
-  const applyTemplate = (template: any) => {
+  const [templateName, setTemplateName] = useState('');
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [showLoadMenu, setShowLoadMenu] = useState(false);
+
+  const applyTemplate = useCallback((template: any) => {
     setConfig({
       ...config,
       examTitle: template.name || config.examTitle,
       subject: template.subject || config.subject,
       sections: template.sections || config.sections
     });
-    alert(`Applied template: ${template.name}`);
-  };
+    setShowLoadMenu(false);
+  }, [config]);
 
   useEffect(() => {
-    if (initialTemplate) {
-      applyTemplate(initialTemplate);
-      onClearTemplate();
-    }
+    const apply = async () => {
+      if (initialTemplate) {
+        applyTemplate(initialTemplate);
+        onClearTemplate();
+      }
+    };
+    apply();
   }, [initialTemplate, applyTemplate, onClearTemplate]);
 
   const [selectedSyllabus, setSelectedSyllabus] = useState('');
   const [generatedPaper, setGeneratedPaper] = useState<any>(null);
 
   const handleSaveTemplate = async () => {
-    const name = prompt("Enter a name for this assessment template:");
-    if (!name) return;
+    if (!templateName) return;
     
     setIsSavingTemplate(true);
     try {
@@ -877,20 +886,19 @@ function GeneratorView({ syllabus, templates, onUpdateTemplates, initialTemplate
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name,
+          name: templateName,
           subject: config.subject,
           sections: config.sections,
           description: `Custom ${config.subject} template created by ${config.schoolName || 'user'}`
         })
       });
       if (res.ok) {
-        alert("Template saved successfully! You can reuse this structure later.");
+        setShowSaveConfirm(false);
+        setTemplateName('');
         onUpdateTemplates();
-      } else {
-        alert("Failed to save template");
       }
     } catch (e) {
-      alert("Error saving template");
+      console.error(e);
     } finally {
       setIsSavingTemplate(false);
     }
@@ -1004,30 +1012,60 @@ function GeneratorView({ syllabus, templates, onUpdateTemplates, initialTemplate
                   <h2 className="text-xl font-bold">Structure</h2>
                   <p className="text-[10px] text-gray-400">Define marks and question count</p>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex gap-4 relative">
                   {templates.length > 0 && (
-                    <div className="relative group">
-                       <button className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full uppercase tracking-widest">
-                         <Layout className="w-3 h-3" /> Load Template
-                       </button>
-                       <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-100 rounded-2xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 p-2">
-                          <div className="text-[9px] font-bold text-gray-400 mb-1 px-2">YOUR TEMPLATES</div>
-                          {templates.slice(0, 5).map((t: any) => (
-                            <button key={t.id} onClick={() => applyTemplate(t)} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 rounded-lg font-medium text-gray-700 truncate">
-                              {t.name}
-                            </button>
-                          ))}
-                          {templates.length > 5 && <div className="text-[8px] text-center text-gray-300 py-1">And {templates.length - 5} more...</div>}
-                       </div>
+                    <div className="relative">
+                        <button 
+                          onClick={() => setShowLoadMenu(!showLoadMenu)}
+                          className={`flex items-center gap-1 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest transition-all ${showLoadMenu ? 'bg-amber-600 text-white' : 'text-amber-600 bg-amber-50'}`}
+                        >
+                          <Layout className="w-3 h-3" /> Load Template
+                        </button>
+                        {showLoadMenu && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setShowLoadMenu(false)} />
+                            <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in fade-in slide-in-from-top-2">
+                               <div className="text-[9px] font-bold text-gray-400 mb-1 px-2 uppercase">Your Templates</div>
+                               {templates.slice(0, 10).map((t: any) => (
+                                 <button key={t.id} onClick={() => applyTemplate(t)} className="w-full text-left px-3 py-2 text-xs hover:bg-amber-50 rounded-lg font-medium text-gray-700 truncate block">
+                                   {t.name}
+                                 </button>
+                               ))}
+                            </div>
+                          </>
+                        )}
                     </div>
                   )}
-                  <button 
-                    onClick={handleSaveTemplate}
-                    disabled={isSavingTemplate}
-                    className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-widest"
-                  >
-                    <Save className="w-3 h-3" /> Save Template
-                  </button>
+
+                  <div className="relative">
+                    <button 
+                      onClick={() => setShowSaveConfirm(!showSaveConfirm)}
+                      disabled={isSavingTemplate}
+                      className={`flex items-center gap-1 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest transition-all ${showSaveConfirm ? 'bg-emerald-600 text-white' : 'text-emerald-600 bg-emerald-50'}`}
+                    >
+                      <Save className="w-3 h-3" /> {isSavingTemplate ? 'Saving...' : 'Save Template'}
+                    </button>
+                    {showSaveConfirm && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowSaveConfirm(false)} />
+                        <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 p-4 animate-in fade-in slide-in-from-top-2">
+                           <div className="text-[10px] font-bold text-gray-400 mb-3 uppercase">Name your template</div>
+                           <input 
+                            autoFocus
+                            className="input-small mb-3" 
+                            placeholder="e.g. Midterm A" 
+                            value={templateName} 
+                            onChange={e => setTemplateName(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleSaveTemplate()}
+                           />
+                           <div className="flex gap-2">
+                             <button onClick={() => setShowSaveConfirm(false)} className="flex-1 px-3 py-2 text-[10px] font-bold text-gray-400 hover:bg-gray-50 rounded-xl uppercase tracking-widest">Cancel</button>
+                             <button onClick={handleSaveTemplate} disabled={!templateName} className="flex-1 px-3 py-2 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl uppercase tracking-widest disabled:opacity-50">Save</button>
+                           </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                   <button 
                     onClick={() => setConfig({...config, sections: [...config.sections, {id: Math.random().toString(), title: 'New Section', count: 1, marks: 1}]})}
                     className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full uppercase tracking-widest"
@@ -1193,7 +1231,7 @@ function AssessmentsView({ onAction }: { onAction: (paper: any, mode: 'preview' 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const fetchAssessments = async () => {
+  const fetchAssessments = useCallback(async () => {
     try {
       const r = await fetch('/api/school/assessments-list');
       if (r.ok) {
@@ -1203,7 +1241,7 @@ function AssessmentsView({ onAction }: { onAction: (paper: any, mode: 'preview' 
     } catch (e) {
       console.error("Failed to fetch assessments:", e);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -1218,9 +1256,12 @@ function AssessmentsView({ onAction }: { onAction: (paper: any, mode: 'preview' 
       }
     };
     
-    fetchStudents();
-    fetchAssessments();
-  }, []);
+    const loadData = async () => {
+      await fetchStudents();
+      await fetchAssessments();
+    };
+    loadData();
+  }, [fetchAssessments]);
 
   const handleEvaluate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1335,7 +1376,7 @@ function PerformanceView({ students }: any) {
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
   const [results, setResults] = useState<any[]>([]);
 
-  const fetchResults = async () => {
+  const fetchResults = useCallback(async () => {
     if (selectedStudent) {
       try {
         const r = await fetch(`/api/school/results?studentId=${selectedStudent}`);
@@ -1347,11 +1388,14 @@ function PerformanceView({ students }: any) {
         console.error("Failed to fetch results:", e);
       }
     }
-  };
+  }, [selectedStudent]);
 
   useEffect(() => {
-    fetchResults();
-  }, [selectedStudent]);
+    const loadResults = async () => {
+      await fetchResults();
+    };
+    loadResults();
+  }, [fetchResults]);
 
   const chartData = useMemo(() => {
     return results.map((r: any) => ({

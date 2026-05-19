@@ -34,7 +34,10 @@ export default function Home() {
   };
 
   useEffect(() => {
-    checkSession();
+    const init = async () => {
+      await checkSession();
+    };
+    init();
   }, []);
 
   if (isLoading) {
